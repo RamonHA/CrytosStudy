@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import time
 import pandas as pd
+import multiprocessing as mp
 
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
@@ -23,9 +24,25 @@ trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 
 trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if t[-4:] == "USDT"]
 
-@timing
-def analyze():
+def analyze_single(s, f):
+    asset = Asset(
+            symbol=s,
+            fiat = f,
+            frequency= f"{L}min",
+            end = datetime.now(),
+            start = datetime.now() - timedelta(seconds= 60*L*150 ),
+            from_ = "ext_api",
+            broker="binance"
+        )
 
+    if asset.df is None or len(asset.df) == 0: 
+        return None
+
+    return asset
+
+# @timing
+def analyze():
+    print("Analyze")
     growth = []
 
     first_rule = []
@@ -39,21 +56,29 @@ def analyze():
     def myFunc(e):
         return e['return']
 
-    for s, f in trading_pairs:
-
-        asset = Asset(
-            symbol=s,
-            fiat = f,
-            frequency= f"{L}min",
-            end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*150 ),
-            from_ = "ext_api",
-            broker="binance"
+    with mp.Pool( mp.cpu_count() // 2 ) as pool:
+        assets = pool.starmap(
+            analyze_single,
+            [ (s,f) for s,f in trading_pairs ]   
         )
+    
+    assets = [ { "asset":asset, "return":asset.momentum(3).iloc[-1] } for asset in assets if asset is not None ]
 
-        if asset.df is None or len(asset.df) == 0: continue
+    # for s, f in trading_pairs:
 
-        assets.append( {"asset": asset, "return": asset.momentum(3).iloc[-1] } )
+    #     asset = Asset(
+    #         symbol=s,
+    #         fiat = f,
+    #         frequency= f"{L}min",
+    #         end = datetime.now(),
+    #         start = datetime.now() - timedelta(seconds= 60*L*150 ),
+    #         from_ = "ext_api",
+    #         broker="binance"
+    #     )
+
+    #     if asset.df is None or len(asset.df) == 0: continue
+
+    #     assets.append( {"asset": asset, "return": asset.momentum(3).iloc[-1] } )
 
     assets.sort(key = myFunc, reverse=True)
 
@@ -68,7 +93,7 @@ def analyze():
         asset.df["rsi"] = asset.rsi_smoth(14, 14)
         asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
         asset.df["ema_slope"] = asset.ema_slope(40, 2)
-        asset.df["ema"] = (asset.ema(40) < asset.df["close"]).rolling(3).sum()
+        asset.df["ema"] = (asset.ema(40) < asset.df["close"]).rolling(4).sum()
         asset.df["growth"] = asset.df["close"].pct_change( 20 )
         asset.df["rsi_smoth_slope"] = asset.rsi_smoth_slope( 7,7,3 )
         asset.df["changes"] = asset.df["close"].pct_change()
@@ -78,7 +103,7 @@ def analyze():
 
         growth.append( {"symbol": asset.symbol, "return": d["growth"]} )
 
-        if d["ema"] == 3:
+        if d["ema"] == 4:
             # changes = asset.df.iloc[-10:]["changes"].mean()
             pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
             arr = {"symbol": asset.symbol, "return": pos_changes}
@@ -127,16 +152,17 @@ def analyze():
 
     return first_rule, second_rule
 
-@timing
+# @timing
 def set_orders(symbol):
     bi = Binance(symbol="")
 
     symbol = "{}USDT".format(symbol)
     pct = 1.002
-    share = .3
+    share = .25
+    leverage = 25
 
     max_leverage = [i for i in bi.client.futures_leverage_bracket() if symbol in i["symbol"]][0]["brackets"][0]["initialLeverage"]
-    leverage = 20 if max_leverage >= 20 else max_leverage
+    leverage = leverage if max_leverage >= leverage else max_leverage
 
     balance = float([ i["balance"] for i in bi.client.futures_account_balance() if i["asset"] == "USDT"][0])
     price = bi.client.futures_symbol_ticker(symbol = symbol)["price"]
@@ -246,33 +272,46 @@ def main():
     return set_orders( symbol )
 
 def bot():
-    
-    st = time.time()
-    
+        
     orderSell = main()
 
     # Wait for order to fill
-    while not wait(orderSell):
+    bi = Binance()
+    while not bi.wait(orderSell):
         print("Waiting another minute!")
         time.sleep( 60*1 )
 
-    print("Order fill!")
+    print("Order fill!\n\n")
 
-    total_time = time.time() - st
-    start_time = datetime.now() - relativedelta(seconds= total_time + ( 60*5 ) )
+    # total_time = time.time() - st
+    # start_time = datetime.now() - relativedelta(seconds= total_time + ( 60*5 ) )
 
-    historic_download( 
-        broker = "binance", 
-        fiat = "usdt", 
-        frequency= f"{L}min",
-        start = start_time,
-        from_ = "ext_api",
-        verbose = False
-    )
+    # historic_download( 
+    #     broker = "binance", 
+    #     fiat = "usdt", 
+    #     frequency= "1min",
+    #     start = start_time.date(),
+    #     from_ = "ext_api",
+    #     verbose = False
+    # )
+    # print("\n")
 
     bot()
 
+def get_orders():
+    bi = Binance(symbol="")
+    df_trades = pd.DataFrame(bi.client.futures_account_trades())
+    df_trades["time"] = df_trades["time"].apply(lambda x : datetime.fromtimestamp( x/1000 ))
+
 if __name__ == "__main__":
-    # bot()
-    main()
+    bot()
+    # main()
     
+    # historic_download( 
+    #     broker = "binance", 
+    #     fiat = "USDT", 
+    #     frequency= "1min",
+    #     start = (datetime.today() - relativedelta(days = 1)).date(),
+    #     from_ = "ext_api",
+    #     verbose = True
+    # )

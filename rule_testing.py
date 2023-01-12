@@ -6,7 +6,21 @@ import json
 
 st = time.time()
 
-asset = Asset(
+class NAsset(Asset):
+    def ema_several(self, length, period):
+        v = (self.ema(length) < self.df["close"]).rolling(period).sum()
+        return v
+    
+    def ema_slope_several(self, length, slope, period):
+        v = (self.ema_slope(length, slope) > 0).rolling(period).sum()
+        return v
+    
+    def rsi_smooth_slope_several(self, length, smoth, slope, period):
+        v = (self.rsi_smoth_slope(length, smoth, slope) > 0).rolling(period).sum()
+        return v
+
+
+asset = NAsset(
     "LTC",
     start = date(2022,1,1),
     end = date(2022,10,1),
@@ -17,10 +31,11 @@ asset = Asset(
 )
 
 rules = [ 
+    "rsi_smooth_slope_several == 2",
     # "ema < close",
-    "ema_slope > 0",
+    # "ema_slope > 0",
     # "rsi_smoth < {}",
-    "rsi_smoth_slope > 0",
+    # "rsi_smoth_slope > 0",
     # "william_fractals == True",
     # "oneside_gaussian_filter_slope > 0",
     # "supertrend > 0"
@@ -32,10 +47,11 @@ universe = [
 ]
 
 columns = { 
+    "rsi_smooth_slope_several":[ [7, 14], [7, 14], [3], [2] ],
     # "ema":(10, 61, 10), # 30, 60, 90, 120
-    "ema_slope":[ (10, 61, 10), (2, 5) ],
+    # "ema_slope":[ (10, 61, 10), (2, 5) ],
     # "rsi_smoth":[ [ 7, 9, 11, 14], [ 7, 9, 11, 14] ], # 7, 14, 21   
-    "rsi_smoth_slope":[  [7, 9, 11, 14], [ 7, 9, 11, 14], (2, 5)  ], # 7-2, 7-3, 7-4, 14-2, 14-3, 14-4
+    # "rsi_smoth_slope":[  [7, 9, 11, 14], [ 7, 9, 11, 14], (2, 5)  ], # 7-2, 7-3, 7-4, 14-2, 14-3, 14-4
     # "william_fractals":[ [2, 3], [True] ],
     # "oneside_gaussian_filter_slope":[(2, 5), (2,6)],
     # "supertrend":[ [5, 7,10,15, 20], [2,3,4] ]
@@ -54,17 +70,17 @@ print(results.head())
 for i in results.iloc[:10].index:
     print( rg.rules_obj[i].asset.params, results.loc[i]["rules"] )
 
-resume = {
-    "rules":rules,
-    "universe":universe,
-    "columns":columns,
-    "results":results.to_dict()
-}
+# resume = {
+#     "rules":rules,
+#     "universe":universe,
+#     "columns":columns,
+#     "results":results.to_dict()
+# }
 
-s = "-".join( list(columns.keys()) )
+# s = "-".join( list(columns.keys()) )
 
-with open( f"results/ta_testing/{s}.json", "w" ) as fp:
-    json.dump( resume, fp )
+# with open( f"results/ta_testing/{s}.json", "w" ) as fp:
+#     json.dump( resume, fp )
 
 # results.iloc[:10].to_csv( "results.csv" )
 
