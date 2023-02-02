@@ -1,5 +1,8 @@
 # Sample code to detect which Future coins to use
 
+import warnings
+warnings.filterwarnings("ignore")
+
 from trading.assets.binance import Binance
 from trading import Asset
 from trading.func_aux import timing
@@ -14,7 +17,7 @@ import multiprocessing as mp
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
 
-L = 5
+L = 3
 
 bi = Binance(symbol="")
 
@@ -23,6 +26,9 @@ futures_exchange_info = bi.client.futures_exchange_info()  # request info on all
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 
 trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if t[-4:] == "USDT"]
+
+class Error():
+    pass
 
 def analyze_single(s, f):
     asset = Asset(
@@ -56,7 +62,7 @@ def analyze():
     def myFunc(e):
         return e['return']
 
-    with mp.Pool( mp.cpu_count() // 2 ) as pool:
+    with mp.Pool( mp.cpu_count() ) as pool:
         assets = pool.starmap(
             analyze_single,
             [ (s,f) for s,f in trading_pairs ]   
@@ -80,75 +86,70 @@ def analyze():
 
     #     assets.append( {"asset": asset, "return": asset.momentum(3).iloc[-1] } )
 
-    assets.sort(key = myFunc, reverse=True)
+    # assets.sort(key = myFunc, reverse=True)
 
-    l = len(assets)
+    # l = len(assets)
 
-    assets = assets[ :int( 0.3*l ) ]
+    # assets = assets[ :int( 0.3*l ) ]
 
     for s in assets:
 
         asset = s["asset"]
-
-        asset.df["rsi"] = asset.rsi_smoth(14, 14)
-        asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
-        asset.df["ema_slope"] = asset.ema_slope(40, 2)
-        asset.df["ema"] = (asset.ema(40) < asset.df["close"]).rolling(4).sum()
         asset.df["growth"] = asset.df["close"].pct_change( 20 )
-        asset.df["rsi_smoth_slope"] = asset.rsi_smoth_slope( 7,7,3 )
         asset.df["changes"] = asset.df["close"].pct_change()
-        asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(2,4)
+
+        asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
+        asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(3,2) > 0
         
+        asset.df["rsi"] = asset.rsi( 7 )
+        asset.df["rsi_smoth"] = asset.rsi_smoth(7, 5)
+        # asset.df["rsi_slope"] = asset.df["rsi_smoth"].pct_change(periods = 3)
+
+        asset.df["rsi_slope"] = asset.rsi_smoth(7, 16).pct_change(periods = 2)
+        # asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
+        asset.df["ema_slope"] = asset.ema_slope(40, 3)
+        # # asset.df["ema"] = (asset.ema(40) < asset.df["close"]).rolling(2).sum()
+        
+        # # asset.df["rsi_smoth_slope"] = asset.rsi_smoth_slope( 7,7,3 )
+        # # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(2,4)
+        
+        asset.df["sell"] = asset.william_fractals(3, shift=True, order = "sell").rolling(3).sum()
+
         d = asset.df.iloc[-1].to_dict()
 
         growth.append( {"symbol": asset.symbol, "return": d["growth"]} )
 
-        if d["ema"] == 4:
-            # changes = asset.df.iloc[-10:]["changes"].mean()
-            pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
-            arr = {"symbol": asset.symbol, "return": pos_changes}
-            if d["ema_slope"] > 0 and d["rsi"] > 40 and d["oneside_gaussian_filter_slope"] > 0:
+        # if d["buy_wf"] and d["sell"] == 0 and d["rsi"] < 70:
+        if d["buy_wf"] and d["oneside_gaussian_filter_slope"] and d["rsi"] < 66 and d["rsi_smoth"] < 66 and d["ema_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0:
+            # pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
+            arr = {"symbol": asset.symbol, "return": asset.momentum(3).iloc[-1]}
+            first_rule.append(arr)
 
-                if d["rsi_smoth_slope"] > 0:
-                    if d["buy_wf"]:
-                        first_rule.append(arr)
-                        buy_order.append(arr)
-                        continue
+
+        # if d["ema"] == 2 and d["sell"] == 0:
+        #     # changes = asset.df.iloc[-10:]["changes"].mean()
+        #     pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
+        #     arr = {"symbol": asset.symbol, "return": pos_changes}
+        #     if d["ema_slope"] > 0 and d["rsi"] > 40 and d["oneside_gaussian_filter_slope"] > 0:
+
+        #         if d["rsi_smoth_slope"] > 0:
+        #             if d["buy_wf"]:
+        #                 first_rule.append(arr)
+        #                 buy_order.append(arr)
+        #                 continue
                         
-                    second_rule.append( arr )
-                    buy_order.append(arr)
-                    continue
+        #             second_rule.append( arr )
+        #             buy_order.append(arr)
+        #             continue
             
-                third_rule.append(arr)
-                buy_order.append(arr)
-                continue
+        #         third_rule.append(arr)
+        #         buy_order.append(arr)
+        #         continue
             
-            forth_rule.append(arr)
-            buy_order.append(arr)
+        #     forth_rule.append(arr)
+        #     buy_order.append(arr)
         
-    first_rule.sort(key = myFunc, reverse=True)
-    second_rule.sort(key = myFunc, reverse=True)
-    third_rule.sort(key = myFunc, reverse=True)
-    forth_rule.sort(key = myFunc, reverse=True)
-    growth.sort(key = myFunc, reverse=True)
-
-    # print("\n")
-
-    # print(first_rule, (len(first_rule)/len(trading_pairs)) )
-    # print("\n")
-
-    # print(second_rule, (len(second_rule)/len(trading_pairs)) )
-    # print("\n")
-
-    # print(third_rule, (len(third_rule)/len(trading_pairs)) )
-    # print("\n")
-
-    # print(forth_rule, (len(forth_rule)/len(trading_pairs)) )
-    # print("\n")
-
-    # print("Greatest growth: \n", growth[:5])
-
-    # print("\n")
+    first_rule.sort(key = myFunc, reverse=False)
 
     return first_rule, second_rule
 
@@ -158,8 +159,8 @@ def set_orders(symbol):
 
     symbol = "{}USDT".format(symbol)
     pct = 1.002
-    share = .25
-    leverage = 25
+    share = .1
+    leverage = 60
 
     max_leverage = [i for i in bi.client.futures_leverage_bracket() if symbol in i["symbol"]][0]["brackets"][0]["initialLeverage"]
     leverage = leverage if max_leverage >= leverage else max_leverage
@@ -173,7 +174,19 @@ def set_orders(symbol):
     qty_rouding = len(str(float([i["stepSize"] for i in ticker_info["filters"] if i["filterType"] == "LOT_SIZE"][0])).split(".")[-1])
     qty = balance*leverage*share / price
 
-    bi.client.futures_change_leverage(symbol=symbol, leverage=leverage)
+    try:
+        bi.client.futures_change_leverage(symbol=symbol, leverage=leverage)
+    except Exception as e:
+        print(f"Exception : {e}")
+        print(e.__dict__)
+        print(max_leverage)
+        return None
+
+    try:
+        bi.client.futures_change_margin_type(symbol=symbol, marginType='ISOLATED')
+    except Exception as e:
+        print(f"Exception : {e}")
+        print(e.__dict__)
 
     def set_buy_order(symbol, qty, qty_rouding):
 
@@ -191,17 +204,34 @@ def set_orders(symbol):
         except Exception as e:
             if e.code == -1111:
                 print("Redo buy order")
+                print(f"Quantity rounding: {qty_rouding}", end = "\t")
                 qty_rouding -= 1
-                orderBuy = set_buy_order(symbol, qty, qty_rouding)
+                print(f"New Quantity rounding: {qty_rouding}")
+                if qty_rouding < 0:
+                    return None
+                return set_buy_order(symbol, qty, qty_rouding)
+            else:
+                print( f"No order for {symbol}. Exception: {e}")
+                print(type(e), e, e.__dict__)
+                if hasattr(e, "code"):
+                    print(e.code)
+                return None
 
         return orderBuy
 
     orderBuy = set_buy_order(symbol, qty, qty_rouding)
+    if orderBuy is None:
+        print(f"Error with buy order for {symbol} due rounding")
+        return None
     print("Buy order done!")
     time.sleep(3)
 
     df_trades = pd.DataFrame(bi.client.futures_account_trades())
     df_trades = df_trades[ df_trades["orderId"] == orderBuy["orderId"] ]
+
+    if len(df_trades) == 0:
+        print(f"No orders with id { orderBuy['orderId'] }")
+        return None
 
     df_trades["qty"] = df_trades["qty"].astype(float)
     df_trades["price"] = df_trades["price"].astype(float)
@@ -233,16 +263,39 @@ def set_orders(symbol):
             if e.code == -1111:
                 print("Redo sell order")
                 price_rounding -= 1
-                orderSell = set_sell_order(symbol, price_sell, qty, price_rounding)
+                if price_rounding < 0:
+                    return None
+                return set_sell_order(symbol, price_sell, qty, price_rounding)
+            
+            else:
+                print(type(e), e, e.__dict__)
+                return None
 
         return orderSell
 
     orderSell = set_sell_order(symbol, price_sell, qty, price_rounding)
+    if orderSell is None:
+        print(f"Error with sell order for {symbol} due rounding")
+        return None
     print("Sell order done!")
 
     print(orderSell)
 
     return orderSell
+
+def check_market():
+
+    asset = Asset(
+            symbol="BTC",
+            fiat = "USDT",
+            frequency= f"{L}min",
+            end = datetime.now(),
+            start = datetime.now() - timedelta(seconds= 60*L*150 ),
+            from_ = "ext_api",
+            broker="binance"
+        )
+
+    return
 
 def wait(orderSell):
     bi = Binance(symbol="")
@@ -258,22 +311,53 @@ def wait(orderSell):
 def main():
     f, s = analyze()
     
-    orders = f
     if len(f) == 0:
-        if len(s) == 0:
-            print("No order is going to be sent")
-            return 
-        orders = s
+        # if len(s) == 0:
+        #     print("No order is going to be sent")
+
+        #     return 0
+        # orders = s
+        print("No order is going to be sent")
+        return 0
+    else:
+        orders = f # + s
     
     symbol = orders[0]["symbol"]
 
+    bad_symbols = ["SC", "RAY"]
+    def checker(symbol):
+        
+        if symbol in bad_symbols:
+            if len(orders) == 1:
+                print("No good symbol to run.")
+                return None
+
+            return checker( orders[1]["symbol"] )
+        
+        return symbol
+    
+    symbol = checker(symbol)
+    if symbol is None:
+        return 1
+
     print(f"Symbol {symbol} is going to be process")
 
-    return set_orders( symbol )
+    orderSell = set_orders(symbol)
+
+    if orderSell is None:
+        print("No order was fullfill")
+        return 2
+
+    return orderSell
 
 def bot():
         
     orderSell = main()
+
+    if not isinstance(orderSell, dict):
+        print(f"Waiting {L} minutes to analyze new positions")
+        time.sleep( 60*L )
+        bot()
 
     # Wait for order to fill
     bi = Binance()
@@ -303,8 +387,11 @@ def get_orders():
     df_trades = pd.DataFrame(bi.client.futures_account_trades())
     df_trades["time"] = df_trades["time"].apply(lambda x : datetime.fromtimestamp( x/1000 ))
 
+    return df_trades
+
 if __name__ == "__main__":
     bot()
+    # get_orders()
     # main()
     
     # historic_download( 

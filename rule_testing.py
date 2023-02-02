@@ -27,32 +27,32 @@ asset = NAsset(
     frequency="1d",
     fiat = "usdt",
     broker = "binance",
-    from_ = "db"
+    from_ = "ext_api"
 )
 
 rules = [ 
-    "rsi_smooth_slope_several == 2",
+    # "rsi_smooth_slope_several == 2",
     # "ema < close",
     # "ema_slope > 0",
-    # "rsi_smoth < {}",
+    "rsi_smoth < {}",
     # "rsi_smoth_slope > 0",
-    # "william_fractals == True",
+    "william_fractals == True",
     # "oneside_gaussian_filter_slope > 0",
     # "supertrend > 0"
     # "engulfing == 1"
 ]
 
 universe = [ 
-    # ( 50, 101, 20 ) # 20, 30, 40, 50
+    ( 50, 91, 5 ) # 20, 30, 40, 50
 ]
 
 columns = { 
-    "rsi_smooth_slope_several":[ [7, 14], [7, 14], [3], [2] ],
+    # "rsi_smooth_slope_several":[ [7, 14], [7, 14], [3], [2] ],
     # "ema":(10, 61, 10), # 30, 60, 90, 120
     # "ema_slope":[ (10, 61, 10), (2, 5) ],
-    # "rsi_smoth":[ [ 7, 9, 11, 14], [ 7, 9, 11, 14] ], # 7, 14, 21   
+    "rsi_smoth":[ [ 7, 9, 11, 14, 21], [ 3, 7, 9, 11, 14] ], # 7, 14, 21   
     # "rsi_smoth_slope":[  [7, 9, 11, 14], [ 7, 9, 11, 14], (2, 5)  ], # 7-2, 7-3, 7-4, 14-2, 14-3, 14-4
-    # "william_fractals":[ [2, 3], [True] ],
+    "william_fractals":[ [2, 3], [True] ],
     # "oneside_gaussian_filter_slope":[(2, 5), (2,6)],
     # "supertrend":[ [5, 7,10,15, 20], [2,3,4] ]
 }
@@ -82,7 +82,7 @@ for i in results.iloc[:10].index:
 # with open( f"results/ta_testing/{s}.json", "w" ) as fp:
 #     json.dump( resume, fp )
 
-# results.iloc[:10].to_csv( "results.csv" )
+# results.iloc[:10].to_csv( "fractals_rsismoth.csv" )
 
 print("\n\n")
 print( time.time() - st )
