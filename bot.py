@@ -110,7 +110,7 @@ def analyze():
         # asset.df["rsi_smoth"] = (asset.rsi_smoth(7, 5) > 67).rolling(14).sum()
         # asset.df["rsi_slope"] = asset.df["rsi_smoth"].pct_change(periods = 3)
 
-        asset.df["rsi_slope"] = asset.rsi_smoth(7, 7).pct_change(periods = 2)
+        asset.df["rsi_slope"] = asset.rsi_smoth(7, 16).pct_change(periods = 2)
         
         # asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
         
