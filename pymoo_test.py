@@ -139,7 +139,7 @@ class TATunning(ElementwiseProblem):
     def _evaluate(self, x, out, *args, **kwargs):
         
         def rounding(i, x):
-            if i not in [5, 9]:
+            if i not in [5, 9, 12]:
                 return round(x)
             else:
                 return x
@@ -153,7 +153,7 @@ def prep_asset( symbl ):
     asset = Asset(
         symbl,
         start = date(2023,1,22),
-        end = date(2023,1,24),
+        end = date(2023,1,26),
         frequency="3min",
         fiat = "USDT",
         broker = "binance",
@@ -162,24 +162,24 @@ def prep_asset( symbl ):
 
     return asset
 
-def main(symbols, algorithm):
+def main(symbols, algorithm_name):
 
-    print(f"------ {algorithm} ------")
+    print(f"------ {algorithm_name} ------")
 
-    gen = 120
+    gen = 200
 
     assets = [ prep_asset(i) for i in symbols ]
 
     problem = TATunning(
         assets = assets,                                                         
-        n_var = 21,
-        xl = [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0],
-        xu = [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        n_var = 24,
+        xl = [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
+        xu = [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
     )
 
-    if algorithm == "DE":
+    if algorithm_name == "DE":
         algorithm = DE(
-            pop_size=100,
+            pop_size=200,
             sampling=LHS(),
             variant="DE/best/1/bin",
             CR=0.3,
@@ -187,7 +187,7 @@ def main(symbols, algorithm):
             jitter=False
         )
 
-    elif algorithm == "NSGA2":
+    elif algorithm_name == "NSGA2":
         algorithm = NSGA2(
             pop_size=100,
             n_offsprings=10,
@@ -197,16 +197,16 @@ def main(symbols, algorithm):
             eliminate_duplicates=True
         )
     
-    elif algorithm == "GA":
+    elif algorithm_name == "GA":
         algorithm = GA(
             pop_size=100,
             eliminate_duplicates=True
         )
     
-    elif algorithm == "CMAES":
+    elif algorithm_name == "CMAES":
         algorithm = CMAES(x0=np.random.random(problem.n_var))
     
-    elif algorithm == "PSO":
+    elif algorithm_name == "PSO":
         algorithm = PSO()
 
     termination = get_termination("n_gen", gen)
@@ -246,7 +246,7 @@ def main(symbols, algorithm):
             "param":X
         }
 
-    with open( f"{algorithm}_{gen}.json", "w" ) as fp:
+    with open( f"{algorithm_name}_{gen}.json", "w" ) as fp:
         json.dump( data, fp )
         
 
@@ -254,6 +254,6 @@ if __name__ == "__main__":
 
     symbols = np.random.choice( list(get_assets()["binance"].keys()) , 20 )
 
-    for algorithm in ["PSO"]: # Si "DE", "NSGA2", "GA",  #No "CMAES",
+    for algorithm in ["DE"]: # Si "DE", "NSGA2", "GA", "PSO"  #No "CMAES",
         main( symbols, algorithm )
     
