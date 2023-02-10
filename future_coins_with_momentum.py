@@ -14,10 +14,15 @@ import time
 import pandas as pd
 import multiprocessing as mp
 
+from registro import futures
+
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
 
-L = 3
+L = 1
+PCT = 1.0015
+SHARE = .05
+LEVERAGE = 60
 
 bi = Binance(symbol="")
 
@@ -95,32 +100,36 @@ def analyze():
     for s in assets:
 
         asset = s["asset"]
-        asset.df["growth"] = asset.df["close"].pct_change( 20 )
+        asset.df["growth"] = asset.df["close"].pct_change( 50 )
         asset.df["changes"] = asset.df["close"].pct_change()
 
         asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
         asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(3,2) > 0
         
-        asset.df["rsi"] = asset.rsi( 7 )
-        asset.df["rsi_smoth"] = asset.rsi_smoth(7, 5)
+        asset.df["rsi"] = (asset.rsi( 7 ) > 67).rolling(14).sum()
+        asset.df["rsi_smoth"] = (asset.rsi_smoth(7, 5) > 67).rolling(14).sum()
         # asset.df["rsi_slope"] = asset.df["rsi_smoth"].pct_change(periods = 3)
 
-        asset.df["rsi_slope"] = asset.rsi_smoth(7, 16).pct_change(periods = 2)
+        asset.df["rsi_slope"] = asset.rsi_smoth(7, 16).pct_change(periods = 3)
         # asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
-        asset.df["ema_slope"] = asset.ema_slope(40, 3)
-        # # asset.df["ema"] = (asset.ema(40) < asset.df["close"]).rolling(2).sum()
+        asset.df["ema_slope"] = asset.ema_slope(45, 3)
+        asset.df["ema"] = (asset.ema(90) < asset.df["close"]).rolling(3).sum()
         
         # # asset.df["rsi_smoth_slope"] = asset.rsi_smoth_slope( 7,7,3 )
         # # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(2,4)
         
         asset.df["sell"] = asset.william_fractals(3, shift=True, order = "sell").rolling(3).sum()
 
+        asset.df["support"], asset.df["resistance"] = asset.support_resistance( 15 , support="close", resistance = "open")
+
+        asset.df["sc"] = (asset.df["support"] == asset.df["close"]).rolling(3).sum()
+
         d = asset.df.iloc[-1].to_dict()
 
-        growth.append( {"symbol": asset.symbol, "return": d["growth"]} )
+        # growth.append( {"symbol": asset.symbol, "return": d["growth"]} )
 
         # if d["buy_wf"] and d["sell"] == 0 and d["rsi"] < 70:
-        if d["buy_wf"] and d["oneside_gaussian_filter_slope"] and d["rsi"] < 66 and d["rsi_smoth"] < 66 and d["ema_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0:
+        if d["buy_wf"] and d["oneside_gaussian_filter_slope"] and d["rsi"] == 0 and d["rsi_smoth"] == 0 and d["ema_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0 and d["ema"] == 3 and d["growth"] < 0.03 and d["sc"] == 0:
             # pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
             arr = {"symbol": asset.symbol, "return": asset.momentum(3).iloc[-1]}
             first_rule.append(arr)
@@ -158,9 +167,9 @@ def set_orders(symbol):
     bi = Binance(symbol="")
 
     symbol = "{}USDT".format(symbol)
-    pct = 1.002
-    share = .1
-    leverage = 60
+    pct = PCT
+    share = SHARE
+    leverage = LEVERAGE
 
     max_leverage = [i for i in bi.client.futures_leverage_bracket() if symbol in i["symbol"]][0]["brackets"][0]["initialLeverage"]
     leverage = leverage if max_leverage >= leverage else max_leverage
@@ -224,6 +233,7 @@ def set_orders(symbol):
         print(f"Error with buy order for {symbol} due rounding")
         return None
     print("Buy order done!")
+    futures(balance)
     time.sleep(3)
 
     df_trades = pd.DataFrame(bi.client.futures_account_trades())
@@ -279,6 +289,9 @@ def set_orders(symbol):
         return None
     print("Sell order done!")
 
+    orderSell["leverage"] = leverage
+    orderSell["balance"] = balance
+
     print(orderSell)
 
     return orderSell
@@ -298,14 +311,44 @@ def check_market():
     return
 
 def wait(orderSell):
-    bi = Binance(symbol="")
-    df_trades = pd.DataFrame(bi.client.futures_account_trades())
+    try:
+        bi = Binance(symbol="")
+
+        df_trades = pd.DataFrame(bi.client.futures_account_trades())
+    except Exception as e:
+        print(e, e.__dict__)
+        raise Exception(e)
 
     df_trades = df_trades[ df_trades["orderId"] == orderSell["orderId"] ]
 
     if len(df_trades) > 0:
         return True
+    
+    sold_price = float(orderSell["price"])
+    bougth_price = sold_price / PCT
+    symbol = orderSell["symbol"]
+    actual_price = float( bi.client.get_symbol_ticker(symbol = symbol)["price"] )
+
+    qty = float(orderSell["origQty"])
+    usdt_bought = sold_price * qty
+    real_leverage = usdt_bought / ( orderSell["balance"]*SHARE )
+    real_leverage = round(real_leverage)
+
+    pct_min = 1 / real_leverage
+
+    if (( actual_price / bougth_price ) - 1) < -( pct_min*0.5 ):
+        newOrderSell = bi.client.futures_create_order(
+                symbol = symbol,
+                type = "MARKET",
+                # timeInForce ="GTC",
+                side = "SELL",
+                quantity = qty,
+            )
         
+        time.sleep(3)
+        
+        return True
+
     return False
 
 def main():
