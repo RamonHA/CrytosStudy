@@ -21,7 +21,7 @@ from registro import futures
 
 L = 1
 PCT = 1.0015
-SHARE = .04
+SHARE = .03
 LEVERAGE = 20
 
 bi = Binance(symbol="")
@@ -62,9 +62,11 @@ def analysis(asset):
     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
+    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 68).rolling(14).sum()
+
     d = asset.df.iloc[-1].to_dict()
 
-    return d["rsi"] > 0 and d["ema"] > 0
+    return d["rsi"] > 0 and d["ema"] > 0 and d["rsi_thr"] == 0
 
 # @timing
 def analyze():
@@ -384,7 +386,8 @@ def main():
     
         print("Orders")
         print(orders)
-        return 0
+        # print("\n")
+        # return 0
     
     symbol = orders[0]["symbol"]
 
