@@ -106,7 +106,7 @@ def analyze():
         # asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
         # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(3,2) > 0
         
-        asset.df["rsi"] = (asset.rsi( 7 ) > 65).rolling(14).sum()
+        asset.df["rsi"] = (asset.rsi( 7 ) > 64).rolling(14).sum()
         # asset.df["rsi_smoth"] = (asset.rsi_smoth(7, 5) > 67).rolling(14).sum()
         # asset.df["rsi_slope"] = asset.df["rsi_smoth"].pct_change(periods = 3)
 
@@ -114,7 +114,7 @@ def analyze():
         
         # asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
         
-        asset.df["ema_slope"] = asset.ema_slope(10, 3)
+        asset.df["ema_slope"] = asset.ema_slope(15, 3)
         asset.df["ema_slope_smoth"] = asset.sma( 3, target = "ema_slope" )
         asset.df["ema_slope_slope"] = asset.df["ema_slope_smoth"].diff()
 
