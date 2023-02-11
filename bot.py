@@ -51,18 +51,29 @@ def analyze_single(s, f):
 
     return asset
 
+def analysis(asset):
+
+    asset.df["rsi1"] = asset.rsi_smoth(7, 3)
+    asset.df["rsi2"] = asset.rsi_smoth(7, 7)
+
+    asset.df["ema1"] = asset.ema(8)
+    asset.df["ema2"] = asset.ema(16)
+
+    asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
+    asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
+
+    d = asset.df.iloc[-1].to_dict()
+
+    return d["rsi"] > 0 and d["ema"] > 0
+
 # @timing
 def analyze():
     print("Analyze")
-    growth = []
 
     first_rule = []
     second_rule = []
-    third_rule = []
-    forth_rule = []
 
     assets = []
-    buy_order = []
 
     def myFunc(e):
         return e['return']
@@ -96,72 +107,73 @@ def analyze():
     # l = len(assets)
 
     # assets = assets[ :int( 0.3*l ) ]
+    first_rule = [ {"symbol": s["asset"].symbol, "return": s["asset"].momentum(3).iloc[-1]} for s in assets if analysis(s["asset"]) ]
 
-    for s in assets:
+    # for s in assets:
 
-        asset = s["asset"]
-        asset.df["growth"] = asset.df["close"].pct_change( 50 )
-        asset.df["changes"] = asset.df["close"].pct_change()
+    #     asset = s["asset"]
+    #     asset.df["growth"] = asset.df["close"].pct_change( 50 )
+    #     asset.df["changes"] = asset.df["close"].pct_change()
 
-        # asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
-        # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(3,2) > 0
+    #     # asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
+    #     # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(3,2) > 0
         
-        asset.df["rsi"] = (asset.rsi( 7 ) > 64).rolling(14).sum()
-        # asset.df["rsi_smoth"] = (asset.rsi_smoth(7, 5) > 67).rolling(14).sum()
-        # asset.df["rsi_slope"] = asset.df["rsi_smoth"].pct_change(periods = 3)
+    #     asset.df["rsi"] = (asset.rsi( 7 ) > 64).rolling(14).sum()
+    #     # asset.df["rsi_smoth"] = (asset.rsi_smoth(7, 5) > 67).rolling(14).sum()
+    #     # asset.df["rsi_slope"] = asset.df["rsi_smoth"].pct_change(periods = 3)
 
-        asset.df["rsi_slope"] = asset.rsi_smoth(7, 16).pct_change(periods = 2)
+    #     asset.df["rsi_slope"] = asset.rsi_smoth(7, 16).pct_change(periods = 2)
         
-        # asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
+    #     # asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
         
-        asset.df["ema_slope"] = asset.ema_slope(15, 3)
-        asset.df["ema_slope_smoth"] = asset.sma( 3, target = "ema_slope" )
-        asset.df["ema_slope_slope"] = asset.df["ema_slope_smoth"].diff()
+    #     asset.df["ema_slope"] = asset.ema_slope(15, 3)
+    #     asset.df["ema_slope_smoth"] = asset.sma( 3, target = "ema_slope" )
+    #     asset.df["ema_slope_slope"] = asset.df["ema_slope_smoth"].diff()
 
-        # asset.df["ema"] = (asset.ema(90) < asset.df["close"]).rolling(3).sum()
+    #     # asset.df["ema"] = (asset.ema(90) < asset.df["close"]).rolling(3).sum()
         
-        # # asset.df["rsi_smoth_slope"] = asset.rsi_smoth_slope( 7,7,3 )
-        # # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(2,4)
+    #     # # asset.df["rsi_smoth_slope"] = asset.rsi_smoth_slope( 7,7,3 )
+    #     # # asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(2,4)
         
-        asset.df["sell"] = asset.william_fractals(3, shift=True, order = "sell").rolling(3).sum()
+    #     asset.df["sell"] = asset.william_fractals(3, shift=True, order = "sell").rolling(3).sum()
 
-        # asset.df["support"], asset.df["resistance"] = asset.support_resistance( 15 , support="close", resistance = "open")
-        # asset.df["sc"] = (asset.df["support"] == asset.df["close"]).rolling(3).sum()
+    #     # asset.df["support"], asset.df["resistance"] = asset.support_resistance( 15 , support="close", resistance = "open")
+    #     # asset.df["sc"] = (asset.df["support"] == asset.df["close"]).rolling(3).sum()
 
-        d = asset.df.iloc[-1].to_dict()
+    #     d = asset.df.iloc[-1].to_dict()
 
-        # growth.append( {"symbol": asset.symbol, "return": d["growth"]} )
+    #     # growth.append( {"symbol": asset.symbol, "return": d["growth"]} )
 
-        # if d["buy_wf"] and d["sell"] == 0 and d["rsi"] < 70:
-        # if d["buy_wf"] and d["oneside_gaussian_filter_slope"] and d["rsi"] == 0 and d["rsi_smoth"] == 0 and d["ema_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0 and d["ema"] == 3 and d["growth"] < 0.03 and d["sc"] == 0:
-        if  d["rsi"] == 0 and d["ema_slope"] > 0 and d["ema_slope_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0 and d["growth"] < 0.03: #and d["sc"] == 0:
-            # pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
-            arr = {"symbol": asset.symbol, "return": asset.momentum(3).iloc[-1]}
-            first_rule.append(arr)
+    #     # if d["buy_wf"] and d["sell"] == 0 and d["rsi"] < 70:
+    #     # if d["buy_wf"] and d["oneside_gaussian_filter_slope"] and d["rsi"] == 0 and d["rsi_smoth"] == 0 and d["ema_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0 and d["ema"] == 3 and d["growth"] < 0.03 and d["sc"] == 0:
+    #     if  d["rsi"] == 0 and d["ema_slope"] > 0 and d["ema_slope_slope"] > 0 and d["rsi_slope"] > 0 and d["sell"] == 0 and d["growth"] < 0.03: #and d["sc"] == 0:
+    #         # pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
+    #         arr = {"symbol": asset.symbol, "return": asset.momentum(3).iloc[-1]}
+    #         first_rule.append(arr)
 
 
-        # if d["ema"] == 2 and d["sell"] == 0:
-        #     # changes = asset.df.iloc[-10:]["changes"].mean()
-        #     pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
-        #     arr = {"symbol": asset.symbol, "return": pos_changes}
-        #     if d["ema_slope"] > 0 and d["rsi"] > 40 and d["oneside_gaussian_filter_slope"] > 0:
+    #     # if d["ema"] == 2 and d["sell"] == 0:
+    #     #     # changes = asset.df.iloc[-10:]["changes"].mean()
+    #     #     pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
+    #     #     arr = {"symbol": asset.symbol, "return": pos_changes}
+    #     #     if d["ema_slope"] > 0 and d["rsi"] > 40 and d["oneside_gaussian_filter_slope"] > 0:
 
-        #         if d["rsi_smoth_slope"] > 0:
-        #             if d["buy_wf"]:
-        #                 first_rule.append(arr)
-        #                 buy_order.append(arr)
-        #                 continue
+    #     #         if d["rsi_smoth_slope"] > 0:
+    #     #             if d["buy_wf"]:
+    #     #                 first_rule.append(arr)
+    #     #                 buy_order.append(arr)
+    #     #                 continue
                         
-        #             second_rule.append( arr )
-        #             buy_order.append(arr)
-        #             continue
+    #     #             second_rule.append( arr )
+    #     #             buy_order.append(arr)
+    #     #             continue
             
-        #         third_rule.append(arr)
-        #         buy_order.append(arr)
-        #         continue
+    #     #         third_rule.append(arr)
+    #     #         buy_order.append(arr)
+    #     #         continue
             
-        #     forth_rule.append(arr)
-        #     buy_order.append(arr)
+    #     #     forth_rule.append(arr)
+    #     #     buy_order.append(arr)
         
     first_rule.sort(key = myFunc, reverse=False)
 
@@ -369,6 +381,10 @@ def main():
         return 0
     else:
         orders = f # + s
+    
+        print("Orders")
+        print(orders)
+        return 0
     
     symbol = orders[0]["symbol"]
 
