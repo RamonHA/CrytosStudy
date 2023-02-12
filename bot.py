@@ -55,6 +55,7 @@ def analysis(asset):
 
     asset.df["rsi1"] = asset.rsi_smoth(7, 3)
     asset.df["rsi2"] = asset.rsi_smoth(7, 7)
+    asset.df["rsi2_slope"] = asset.df["rsi2"].pct_change()
 
     asset.df["ema1"] = asset.ema(8)
     asset.df["ema2"] = asset.ema(16)
@@ -316,7 +317,7 @@ def set_orders(symbol):
 def check_market():
 
     asset = Asset(
-            symbol="BTC",
+            symbol="DOGE",
             fiat = "USDT",
             frequency= f"{L}min",
             end = datetime.now(),
@@ -325,7 +326,7 @@ def check_market():
             broker="binance"
         )
 
-    return
+    return asset
 
 def wait(orderSell):
     try:
