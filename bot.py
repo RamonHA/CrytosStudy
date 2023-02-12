@@ -19,7 +19,7 @@ from registro import futures
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
 
-L = 1
+L = 3
 PCT = 1.0015
 SHARE = .03
 LEVERAGE = 20
@@ -62,11 +62,11 @@ def analysis(asset):
     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
-    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 68).rolling(14).sum()
+    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 66).rolling(10).sum()
 
     d = asset.df.iloc[-1].to_dict()
 
-    return d["rsi"] > 0 and d["ema"] > 0 and d["rsi_thr"] == 0
+    return d["rsi"] > 0 and d["ema"] > 0 and d["rsi_thr"] == 0 and d["rsi2"] < 50
 
 # @timing
 def analyze():
