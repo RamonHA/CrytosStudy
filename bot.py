@@ -13,6 +13,7 @@ from dateutil.relativedelta import relativedelta
 import time
 import pandas as pd
 import multiprocessing as mp
+from copy import copy
 
 from registro import futures
 
@@ -55,7 +56,7 @@ def analysis(asset):
 
     asset.df["rsi1"] = asset.rsi_smoth(7, 3)
     asset.df["rsi2"] = asset.rsi_smoth(7, 7)
-    asset.df["rsi2_slope"] = asset.df["rsi2"].pct_change()
+    asset.df["rsi2_slope"] = asset.df["rsi2"].pct_change(3)
 
     asset.df["ema1"] = asset.ema(8)
     asset.df["ema2"] = asset.ema(16)
@@ -67,7 +68,13 @@ def analysis(asset):
 
     d = asset.df.iloc[-1].to_dict()
 
-    return d["rsi"] > 0 and d["ema"] > 0 and d["rsi_thr"] == 0 and d["rsi2"] < 50
+    return (
+        d["rsi"] > 0 and        # rsi fast above slow
+        d["ema"] > 0 and        # ema fast above slow
+        d["rsi_thr"] == 0 and   # rsi max point
+        d["rsi2"] < 55 and      # rsi min point
+        d["rsi2_slope"] > 0     # rsi slope
+    )
 
 # @timing
 def analyze():
@@ -154,31 +161,10 @@ def analyze():
     #         arr = {"symbol": asset.symbol, "return": asset.momentum(3).iloc[-1]}
     #         first_rule.append(arr)
 
-
-    #     # if d["ema"] == 2 and d["sell"] == 0:
-    #     #     # changes = asset.df.iloc[-10:]["changes"].mean()
-    #     #     pos_changes = asset.df[ asset.df["changes"] > 0 ].iloc[-10:]["changes"].mean()
-    #     #     arr = {"symbol": asset.symbol, "return": pos_changes}
-    #     #     if d["ema_slope"] > 0 and d["rsi"] > 40 and d["oneside_gaussian_filter_slope"] > 0:
-
-    #     #         if d["rsi_smoth_slope"] > 0:
-    #     #             if d["buy_wf"]:
-    #     #                 first_rule.append(arr)
-    #     #                 buy_order.append(arr)
-    #     #                 continue
-                        
-    #     #             second_rule.append( arr )
-    #     #             buy_order.append(arr)
-    #     #             continue
-            
-    #     #         third_rule.append(arr)
-    #     #         buy_order.append(arr)
-    #     #         continue
-            
-    #     #     forth_rule.append(arr)
-    #     #     buy_order.append(arr)
+    second_rule = copy(first_rule)
         
     first_rule.sort(key = myFunc, reverse=False)
+    second_rule.sort(key = myFunc, reverse=True)
 
     return first_rule, second_rule
 
@@ -386,9 +372,10 @@ def main():
         orders = f # + s
     
         print("Orders")
-        print(orders)
+        print(f)
+        print(s)
         # print("\n")
-        # return 0
+        return 0
     
     symbol = orders[0]["symbol"]
 
