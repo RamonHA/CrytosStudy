@@ -22,8 +22,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0015
-SHARE = .06
-LEVERAGE = 30
+SHARE = .18
+LEVERAGE = 72
 
 bi = Binance(symbol="")
 
@@ -54,9 +54,11 @@ def analyze_single(s, f):
 
 def analysis(asset):
 
-    asset.df["rsi1"] = asset.rsi_smoth(7, 3)
-    asset.df["rsi2"] = asset.rsi_smoth(7, 7)
-    asset.df["rsi2_slope"] = asset.df["rsi2"].pct_change(3)
+    asset.df["rsi_main"] = asset.rsi(7)
+    asset.df["rsi1"] = asset.ema(2, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
+    asset.df["rsi2"] = asset.ema(7, target = "rsi_main") # asset.rsi_smoth(7, 7)
+
+    asset.df["rsi2_slope"] = asset.rsi_smoth_slope(10, 10, 3) # asset.df["rsi2"].pct_change(3)
 
     asset.df["ema1"] = asset.ema(8)
     asset.df["ema2"] = asset.ema(16)
@@ -64,7 +66,9 @@ def analysis(asset):
     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
-    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 67).rolling(13).sum()
+    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 67).rolling(20).sum()
+
+    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(20).std()
 
     d = asset.df.iloc[-1].to_dict()
 
@@ -73,7 +77,8 @@ def analysis(asset):
         d["ema"] > 0 and        # ema fast above slow
         d["rsi_thr"] == 0 and   # rsi max point
         d["rsi2"] < 55 and      # rsi min point
-        d["rsi2_slope"] > 0     # rsi slope
+        d["rsi2_slope"] > 0 and # rsi slope,
+        d["rsi_std"] > 1.4      # Ensure volatility. Low volatility refers to steady price or side-trend
     )
 
 # @timing
@@ -181,7 +186,12 @@ def set_orders(symbol):
     leverage = leverage if max_leverage >= leverage else max_leverage
 
     balance = float([ i["balance"] for i in bi.client.futures_account_balance() if i["asset"] == "USDT"][0])
-    price = bi.client.futures_symbol_ticker(symbol = symbol)["price"]
+    price = bi.client.futures_symbol_ticker(symbol = symbol).get("price", False)
+    
+    if not price:
+        print(f"Algo malo con el symbolo: {symbol}")
+        return None
+
     price = float(price)
 
     ticker_info = bi.client.get_symbol_info(symbol)
@@ -317,9 +327,8 @@ def check_market():
     return asset
 
 def wait(orderSell):
+    bi = Binance(symbol="")
     try:
-        bi = Binance(symbol="")
-
         df_trades = pd.DataFrame(bi.client.futures_account_trades())
     except Exception as e:
         print(e, e.__dict__)
