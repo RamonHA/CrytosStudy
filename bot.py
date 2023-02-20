@@ -68,7 +68,7 @@ def analysis(asset):
 
     asset.df["rsi_thr"] = (asset.rsi( 7 ) > 67).rolling(20).sum()
 
-    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(20).std()
+    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(18).std()
 
     d = asset.df.iloc[-1].to_dict()
 
@@ -78,7 +78,7 @@ def analysis(asset):
         d["rsi_thr"] == 0 and   # rsi max point
         d["rsi2"] < 55 and      # rsi min point
         d["rsi2_slope"] > 0 and # rsi slope,
-        d["rsi_std"] > 1.4      # Ensure volatility. Low volatility refers to steady price or side-trend
+        d["rsi_std"] > 2      # Ensure volatility. Low volatility refers to steady price or side-trend
     )
 
 # @timing
