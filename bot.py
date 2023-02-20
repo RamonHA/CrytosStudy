@@ -22,8 +22,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0015
-SHARE = .18
-LEVERAGE = 72
+SHARE = .05
+LEVERAGE = 50
 
 bi = Binance(symbol="")
 
