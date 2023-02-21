@@ -22,8 +22,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0015
-SHARE = .05
-LEVERAGE = 50
+SHARE = .03
+LEVERAGE = 30
 
 bi = Binance(symbol="")
 
@@ -70,6 +70,8 @@ def analysis(asset):
 
     asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(18).std()
 
+    asset.df["market_tendency"] = (asset.ema(30) < asset.df["close"]).rolling(5).sum()
+
     d = asset.df.iloc[-1].to_dict()
 
     return (
@@ -78,7 +80,8 @@ def analysis(asset):
         d["rsi_thr"] == 0 and   # rsi max point
         d["rsi2"] < 55 and      # rsi min point
         d["rsi2_slope"] > 0 and # rsi slope,
-        d["rsi_std"] > 2      # Ensure volatility. Low volatility refers to steady price or side-trend
+        d["rsi_std"] > 2 and    # Ensure volatility. Low volatility refers to steady price or side-trend
+        d["market_tendency"] == 5
     )
 
 # @timing
