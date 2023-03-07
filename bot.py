@@ -55,7 +55,7 @@ def analyze_single(s, f):
 def analysis(asset):
 
     asset.df["rsi_main"] = asset.rsi(7)
-    asset.df["rsi1"] = asset.ema(2, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
+    asset.df["rsi1"] = asset.ema(3, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
     asset.df["rsi2"] = asset.ema(7, target = "rsi_main") # asset.rsi_smoth(7, 7)
 
     asset.df["rsi2_slope"] = asset.rsi_smoth_slope(10, 10, 3) # asset.df["rsi2"].pct_change(3)
@@ -66,11 +66,11 @@ def analysis(asset):
     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
-    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 67).rolling(20).sum()
+    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 68).rolling(20).sum()
 
     asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(18).std()
 
-    asset.df["market_tendency"] = (asset.ema(30) < asset.df["close"]).rolling(5).sum()
+    asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(4).sum()
 
     d = asset.df.iloc[-1].to_dict()
 
@@ -78,10 +78,10 @@ def analysis(asset):
         d["rsi"] > 0 and        # rsi fast above slow
         d["ema"] > 0 and        # ema fast above slow
         d["rsi_thr"] == 0 and   # rsi max point
-        d["rsi2"] < 55 and      # rsi min point
+        d["rsi2"] < 56 and      # rsi min point
         d["rsi2_slope"] > 0 and # rsi slope,
-        d["rsi_std"] > 2 and    # Ensure volatility. Low volatility refers to steady price or side-trend
-        d["market_tendency"] == 5
+        d["rsi_std"] > 1.5 and    # Ensure volatility. Low volatility refers to steady price or side-trend
+        d["market_tendency"] == 0
     )
 
 # @timing
