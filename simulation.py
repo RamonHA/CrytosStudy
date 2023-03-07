@@ -58,10 +58,10 @@ def single_exec(freq, tests_time, periods, length, rsi, smoth, slope):
     )
 
     sim.analyze(
-        frequency=freq,
-        test_time=tests_time,
+        frequency=freq, # 1d
+        test_time=tests_time, # 1
         analysis= {
-            # "William_RSIVariants_EMASlope":{
+             # "William_RSIVariants_EMASlope":{
             #     "function":william_and_rsi_variants,
             #     "time":150,
             #     "type":"filter",
@@ -74,11 +74,12 @@ def single_exec(freq, tests_time, periods, length, rsi, smoth, slope):
             #     "type":"filter",
             # },
             # "SimpleEMA":{
+            #     "frequency":"2h"
             #     "function":simple_ema,
             #     "time":100,
             #     "type":"filter",
-            #     "filter":"highest",
-            #     "filter_qty":3
+            #     "filter":"highest", "lowest", "positive", "all"
+            #     "filter_qty":3, # 0.1
             # }
             "LowestEMAMomentum_{}_{}".format(periods, length):{
                 "function":momentum,

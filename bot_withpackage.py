@@ -2,9 +2,11 @@
 
 from trading.processes import Bot
 from trading.assets.binance import Binance
+import time
+import pandas as pd
 
 L = 3
-PCT = 1.0015
+PCT = .0015
 SHARE = .05
 LEVERAGE = 50
 
@@ -44,10 +46,12 @@ def func(asset):
 if __name__ == "__main__":
 
     # Get available Future pairs
-    bi = Binance()
-    futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
-    trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
-    trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if t[-4:] == "USDT"]
+    bi = Binance( #-> Asset
+        fiat = "USDT",
+        account = "futures"
+    )
+
+    trading_pairs = bi.trading_pairs()
 
     # Set bot main config
     bot = Bot(
@@ -56,7 +60,10 @@ if __name__ == "__main__":
         fiat = "USDT",
         verbose = 2,
         assets = trading_pairs,
-        account="future"
+        account="futures",
+        account_config = {
+            "leverage": LEVERAGE
+        }
     )
 
     # Set analyzis config
@@ -75,18 +82,52 @@ if __name__ == "__main__":
     # How to choose
     if len(bot.results) == 0:
         print("It is empty")
+    
+    # bot.optimize() -> {Dictionary with selection assets and qty}
 
-    # selectedCrypto = {"BTC":2, "ETH":1.8}
-    selectedCrypto = bot.filter(
-        bot.results, 
-        filter = "highest", 
-        filter_qty = 1
+    bot.choose(
+        value = bi.wallet_balance()*LEVERAGE*SHARE, # In orther to calculate exactly the amount to buy
+        filter = "highest",
+        filter_qty = 1,
     )
 
-    orderBuy = bot.buy()
+    bot.buy()
 
-    orderSell = bot.sell()
+    time.sleep(3)
 
-    bot.wait(  )
+    ################################################################
+    df_trades = pd.DataFrame(bi.client.futures_account_trades())
+    df_trades["qty"] = df_trades["qty"].astype(float)
+    df_trades["price"] = df_trades["price"].astype(float)
+
+    sell_prices = {}
+    for symbol, orderBuy in bot.buy_orders:
+        df_trades = df_trades[ df_trades["orderId"] == orderBuy["orderId"] ]
+
+        if len(df_trades) == 0:
+            print(f"No orders with id { orderBuy['orderId'] }")
+            continue
+
+        qty = df_trades["qty"].iloc[-1]
+        real_price_bought = df_trades["price"].iloc[-1]
+
+        if len(df_trades) > 1:
+            real_price_bought = df_trades["price"].max() 
+            qty = df_trades["qty"].sum()
+            
+        price_rounding = len(str(real_price_bought).split(".")[-1])
+        price_sell = real_price_bought*PCT
+    ################################################################
+
+    orderSell = bot.sell(
+        sell_price = PCT, # can also be a dictionary
+    )
+
+    bot.wait(  
+        # stop_limit = .01,
+        # stop_limit_leverage_scale = True
+    )
+
+    
 
 

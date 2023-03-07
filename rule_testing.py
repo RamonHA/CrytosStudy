@@ -20,12 +20,12 @@ class NAsset(Asset):
         return v
 
 
-asset = NAsset(
+asset = Asset(
     "LTC",
     start = date(2022,1,1),
     end = date(2022,10,1),
     frequency="1d",
-    fiat = "usdt",
+    fiat = "USDT",
     broker = "binance",
     from_ = "ext_api"
 )
@@ -36,7 +36,7 @@ rules = [
     # "ema_slope > 0",
     "rsi_smoth < {}",
     # "rsi_smoth_slope > 0",
-    "william_fractals == True",
+    # "william_fractals == True",
     # "oneside_gaussian_filter_slope > 0",
     # "supertrend > 0"
     # "engulfing == 1"

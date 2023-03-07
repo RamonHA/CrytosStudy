@@ -20,6 +20,9 @@ from pymoo.algorithms.soo.nonconvex.cmaes import CMAES
 from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.operators.sampling.lhs import LHS
 
+from pymoo.core.population import Population
+from pymoo.core.evaluator import Evaluator
+
 import numpy as np
 from copy import deepcopy
 from datetime import date, datetime
@@ -209,7 +212,7 @@ def main(symbols, algorithm_name):
     assets = [ prep_asset(i) for i in symbols ]
 
     # initialize the thread pool and create the runner
-    n_threads = 4
+    n_threads = 5
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
 
@@ -222,10 +225,17 @@ def main(symbols, algorithm_name):
         elementwise_runner=runner,
     )
 
+    # Iteration obtained with 100 gens
+    X = [0.7272260286390523, 18.00387003160997, 2.1002420079879416, 6.665148402373074, 5.250123872371164, 0.3389001855261586, 6.7582607608022505, 20.307771982806567, 2.134609588376494, 0.0011687823761985868, 18.063884172688574, 28.598043151276272, 0.3928198128907693, 5.505033731932276, 61.34314180656084, 6.113085474847783, 0.9754976040022505, 56.67614988094437, 0.09864090725804009, 20.15538774485999, 4.016661131295658, 0.014239166217713749]
+    
+    pop = Population(22)
+    pop.set("X", X)
+    Evaluator().eval(problem, pop)
+
     if algorithm_name == "DE":
         algorithm = DE(
             pop_size=80,
-            sampling=LHS(),
+            sampling=pop, # LHS(),
             variant="DE/best/2/bin",
             CR=0.2,
             dither="vector",
@@ -291,14 +301,14 @@ def main(symbols, algorithm_name):
             "param":X
         }
     
-    with open( f"results/metaheuristics/FixBuy_newRSIslope_plus_EMAslope_{algorithm_name}_{gen}.json", "w" ) as fp:
+    with open( f"results/metaheuristics/WarmStart_FixBuy_newRSIslope_plus_EMAslope_{algorithm_name}_{gen}.json", "w" ) as fp:
         json.dump( data, fp )
     
     pool.close()
 
 
 if __name__ == "__main__":
-
+    
     symbols = np.random.choice( list(get_assets()["binance"].keys()) , 20 )
 
     for algorithm in ["DE"]: # Si "DE", "NSGA2", "GA", "PSO"  #No "CMAES",
