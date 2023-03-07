@@ -53,10 +53,19 @@ def analyze_single(s, f):
     return asset
 
 def analysis(asset):
+    """  
+        Last update: 7/3/2023
 
-    asset.df["rsi_main"] = asset.rsi(7)
-    asset.df["rsi1"] = asset.ema(3, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
-    asset.df["rsi2"] = asset.ema(7, target = "rsi_main") # asset.rsi_smoth(7, 7)
+        Based on results of 100gen pymoo_test
+    """
+
+    # asset.df["rsi_main"] = asset.rsi(7)
+    # asset.df["rsi1"] = asset.ema(3, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
+    # asset.df["rsi2"] = asset.ema(7, target = "rsi_main") # asset.rsi_smoth(7, 7)
+
+    asset.df["rsi1"] = asset.rsi_smoth(14, 2)
+    asset.df["rsi2"] = asset.rsi_smoth(7, 5)
+    asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum() > 0
 
     asset.df["rsi2_slope"] = asset.rsi_smoth_slope(10, 10, 3) # asset.df["rsi2"].pct_change(3)
 

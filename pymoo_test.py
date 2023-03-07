@@ -81,7 +81,7 @@ class TATunning(ElementwiseProblem):
 
         cols_to_use = []
 
-        if (x[2] >= x[4]) or ( x[10] >= x[11] ):
+        if (x[1] >= x[3]) or ( x[10] >= x[11] ):
             return np.inf
 
         if x[0]:
