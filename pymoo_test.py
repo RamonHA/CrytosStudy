@@ -18,7 +18,9 @@ from pymoo.algorithms.soo.nonconvex.de import DE
 from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.algorithms.soo.nonconvex.cmaes import CMAES
 from pymoo.algorithms.soo.nonconvex.pso import PSO
+
 from pymoo.operators.sampling.lhs import LHS
+from pymoo.operators.sampling.rnd import IntegerRandomSampling
 
 import numpy as np
 from copy import deepcopy
@@ -39,6 +41,8 @@ def sell_column(asset, target ):
     true_values = asset.df[ asset.df["buy"] == True ].index.tolist()
     close = asset.df["close"]
 
+    last_value_index = true_values[-1]
+
     for i in true_values:
         close_price = close[i] # bought price
         close_aux = close[ i: ]
@@ -46,9 +50,10 @@ def sell_column(asset, target ):
         pct_index = close_aux[ close_aux >= target ]
 
         if len(pct_index) == 0:
-            # Este mensaje no importa por el momento, solo nos indica que como no hay mejor, yo no
-            # nos moveremos a los siguientes puesto
-            # que al no cerrarse esta orden, no podemos abrir ni cerrar las demas.
+            # Esta entrada nos indica que como no hay mejor, entonces el retorno de la estrategia 
+            # estara ligada al ultrimo precio de nuestro tabal
+            # Sera el ultimo precio de la tabla lo que sera considerado como la orden de cierre.
+            asset.df.loc[ -1, "sell" ] = True
             # raise Exception( "Testing did not prove a better return." )
             break
         
@@ -70,6 +75,7 @@ class TATunning(ElementwiseProblem):
                          n_ieq_constr=0,
                          xl=kwargs["xl"], # np.array([7,3, 40]),
                          xu=kwargs["xu"], #np.array([21,14, 90])
+                         vtype=int
         )
 
     def my_obj_func(self, asset, x):
@@ -204,7 +210,7 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 200
+    gen = 10
 
     assets = [ prep_asset(i) for i in symbols ]
 
@@ -225,7 +231,7 @@ def main(symbols, algorithm_name):
     if algorithm_name == "DE":
         algorithm = DE(
             pop_size=80,
-            sampling=LHS(),
+            sampling=IntegerRandomSampling(), # LHS(),
             variant="DE/best/2/bin",
             CR=0.2,
             dither="vector",
@@ -243,6 +249,7 @@ def main(symbols, algorithm_name):
         )
     
     elif algorithm_name == "GA":
+        """ https://pymoo.org/customization/discrete.html """
         algorithm = GA(
             pop_size=100,
             eliminate_duplicates=True
