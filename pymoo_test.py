@@ -41,6 +41,9 @@ def sell_column(asset, target ):
     true_values = asset.df[ asset.df["buy"] == True ].index.tolist()
     close = asset.df["close"]
 
+    if len(true_values) == 0:
+        return asset
+
     last_value_index = true_values[-1]
 
     for i in true_values:
@@ -129,6 +132,10 @@ class TATunning(ElementwiseProblem):
         if x[18]:
             cols_to_use.append("ema_slope")
             asset.df["ema_slope"] = asset.ema_slope( x[19], x[20] ) > 0
+
+        if x[22]:
+            cols_to_use.append("rsi_std")
+            asset.df[ "rsi_std" ] = asset.rsi_smoth(x[23],x[24]).rolling(x[25]).std()
         
         # if x[17]:
         #     cols_to_use.append("rsi_slope")
@@ -195,8 +202,8 @@ class TATunning(ElementwiseProblem):
 def prep_asset( symbl ):
     asset = Asset(
         symbl,
-        start = date(2023,1,21),
-        end = date(2023,1,26),
+        start = date(2023,3,1),
+        end = date(2023,3,10),
         frequency="3min",
         fiat = "USDT",
         broker = "binance",
@@ -210,28 +217,28 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 10
+    gen = 300
 
     assets = [ prep_asset(i) for i in symbols ]
 
     # initialize the thread pool and create the runner
-    n_threads = 4
+    n_threads = 8
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
 
     problem = TATunning(
         assets = assets,                                                         
-        n_var = 22,# 24,
-        xl = [0, 5, 2, 5, 5, 0, 5, 2, 2, 0, 6, 6, 0, 5, 60, 6, 0, 40, 0, 7, 2, 0],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
-        xu = [1, 22, 8, 22, 22, 1, 22, 22, 4, 1, 30, 30, 1, 7, 75, 20, 1, 60, 1, 50, 7, 1],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
+        n_var = 26,# 24,
+        xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
+        xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
 
     if algorithm_name == "DE":
         algorithm = DE(
-            pop_size=80,
-            sampling=IntegerRandomSampling(), # LHS(),
+            pop_size=100,
+            sampling= IntegerRandomSampling(), # LHS(),
             variant="DE/best/2/bin",
             CR=0.2,
             dither="vector",

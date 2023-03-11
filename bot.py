@@ -75,11 +75,11 @@ def analysis(asset):
     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
-    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 68).rolling(20).sum()
+    asset.df["rsi_thr"] = (asset.rsi( 10 ) > 75).rolling(20).sum()
 
-    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(18).std()
+    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(15).std()
 
-    asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(4).sum()
+    asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(6).sum()
 
     d = asset.df.iloc[-1].to_dict()
 
