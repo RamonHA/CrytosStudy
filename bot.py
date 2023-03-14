@@ -63,9 +63,8 @@ def analysis(asset):
     # asset.df["rsi1"] = asset.ema(3, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
     # asset.df["rsi2"] = asset.ema(7, target = "rsi_main") # asset.rsi_smoth(7, 7)
 
-    asset.df["rsi1"] = asset.rsi_smoth(14, 2)
-    asset.df["rsi2"] = asset.rsi_smoth(7, 5)
-    asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum() > 0
+    asset.df["rsi1"] = asset.rsi_smoth(10, 3)
+    asset.df["rsi2"] = asset.rsi_smoth(10, 7)
 
     asset.df["rsi2_slope"] = asset.rsi_smoth_slope(10, 10, 3) # asset.df["rsi2"].pct_change(3)
 
@@ -75,11 +74,11 @@ def analysis(asset):
     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
-    asset.df["rsi_thr"] = (asset.rsi( 7 ) > 68).rolling(20).sum()
+    asset.df["rsi_thr"] = (asset.rsi( 10 ) > 75).rolling(20).sum()
 
-    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(18).std()
+    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(15).std()
 
-    asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(4).sum()
+    asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(6).sum()
 
     d = asset.df.iloc[-1].to_dict()
 
