@@ -90,72 +90,93 @@ class TATunning(ElementwiseProblem):
 
         cols_to_use = []
 
-        if (x[1] >= x[3]) or ( x[10] >= x[11] ):
-            return np.inf
+        # Anterior test
+        # if (x[1] >= x[3]) or ( x[10] >= x[11] ):
+        #     return np.inf
 
-        if x[0]:
-            cols_to_use.append("rsi")
-            asset.df["rsi1"] = asset.rsi_smoth(x[1], x[2])
-            asset.df["rsi2"] = asset.rsi_smoth(x[3], x[4])
-            asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum() > 0
-
-            if x[16]:
-                cols_to_use.append("rsi2")
-                asset.df["rsi2"] = asset.df["rsi2"] < x[17]
-
-        if x[5]:
-            cols_to_use.append("rsi_slope")
-            asset.df["rsi_slope"] = asset.rsi_smoth_slope(x[6], x[7], x[8]) > 0
-
-        if x[9]:
-            cols_to_use.append("ema")
-            asset.df["ema1"] = asset.ema(x[10])
-            asset.df["ema2"] = asset.ema(x[11])
-            asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum() > 0
-        
-        if x[12]:
-            cols_to_use.append("rsi_thr")
-            asset.df["rsi_thr"] = (asset.rsi( x[13] ) > x[14]).rolling(x[15]).sum() == 0
-
-        if x[21]:
-            cols_to_use.append("buy_wf")
-            asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
-        
-        # if x[14]:
-        #     cols_to_use.append("sell_wf")
-        #     asset.df["sell_wf"] = asset.william_fractals(3, shift=True, order = "sell").rolling(3).sum() == 0
-        
-        # if x[15]:
+        # if x[0]:
         #     cols_to_use.append("rsi")
-        #     asset.df["rsi"] = asset.rsi_smoth(x[0], x[1]) < x[2]
-        
-        if x[18]:
-            cols_to_use.append("ema_slope")
-            asset.df["ema_slope"] = asset.ema_slope( x[19], x[20] ) > 0
+        #     asset.df["rsi1"] = asset.rsi_smoth(x[1], x[2])
+        #     asset.df["rsi2"] = asset.rsi_smoth(x[3], x[4])
+        #     asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum() > 0
 
-        if x[22]:
-            cols_to_use.append("rsi_std")
-            asset.df[ "rsi_std" ] = asset.rsi_smoth(x[23],x[24]).rolling(x[25]).std()
-        
-        # if x[17]:
+        #     if x[16]:
+        #         cols_to_use.append("rsi2")
+        #         asset.df["rsi2"] = asset.df["rsi2"] < x[17]
+
+        # if x[5]:
         #     cols_to_use.append("rsi_slope")
-        #     asset.df["rsi_slope"] = asset.rsi_smoth_slope( x[6], x[7], x[8] ) > x[9]
+        #     asset.df["rsi_slope"] = asset.rsi_smoth_slope(x[6], x[7], x[8]) > 0
+
+        # if x[9]:
+        #     cols_to_use.append("ema")
+        #     asset.df["ema1"] = asset.ema(x[10])
+        #     asset.df["ema2"] = asset.ema(x[11])
+        #     asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum() > 0
         
-        # if x[18]:
-        #     cols_to_use.append("oneside_gaussian_filter_slope")
-        #     asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(x[10],x[11]) > x[12]
-        
-        # if x[19]:
-        #     cols_to_use.append("engulfing_buy")
-        #     asset.df["engulfing_buy"] = asset.engulfing() == 1
-        
-        # if x[20]:
-        #     cols_to_use.append("engulfing_sell")
-        #     asset.df["engulfing_sell"] = asset.engulfing() != -1
+        # if x[12]:
+        #     cols_to_use.append("rsi_thr")
+        #     asset.df["rsi_thr"] = (asset.rsi( x[13] ) > x[14]).rolling(x[15]).sum() == 0
 
         # if x[21]:
-        #     cols_to_use.append("dema_sma")
-        #     asset.df["dema_sma"] = asset.dema( x[22] ) > asset.sma( x[23] )
+        #     cols_to_use.append("buy_wf")
+        #     asset.df["buy_wf"] = asset.william_fractals(3, shift=True)
+        
+        # # if x[14]:
+        # #     cols_to_use.append("sell_wf")
+        # #     asset.df["sell_wf"] = asset.william_fractals(3, shift=True, order = "sell").rolling(3).sum() == 0
+        
+        # # if x[15]:
+        # #     cols_to_use.append("rsi")
+        # #     asset.df["rsi"] = asset.rsi_smoth(x[0], x[1]) < x[2]
+        
+        # if x[18]:
+        #     cols_to_use.append("ema_slope")
+        #     asset.df["ema_slope"] = asset.ema_slope( x[19], x[20] ) > 0
+
+        # if x[22]:
+        #     cols_to_use.append("rsi_std")
+        #     asset.df[ "rsi_std" ] = asset.rsi_smoth(x[23],x[24]).rolling(x[25]).std()
+        
+        # # if x[17]:
+        # #     cols_to_use.append("rsi_slope")
+        # #     asset.df["rsi_slope"] = asset.rsi_smoth_slope( x[6], x[7], x[8] ) > x[9]
+        
+        # # if x[18]:
+        # #     cols_to_use.append("oneside_gaussian_filter_slope")
+        # #     asset.df["oneside_gaussian_filter_slope"] = asset.oneside_gaussian_filter_slope(x[10],x[11]) > x[12]
+        
+        # # if x[19]:
+        # #     cols_to_use.append("engulfing_buy")
+        # #     asset.df["engulfing_buy"] = asset.engulfing() == 1
+        
+        # # if x[20]:
+        # #     cols_to_use.append("engulfing_sell")
+        # #     asset.df["engulfing_sell"] = asset.engulfing() != -1
+
+        # # if x[21]:
+        # #     cols_to_use.append("dema_sma")
+        # #     asset.df["dema_sma"] = asset.dema( x[22] ) > asset.sma( x[23] )
+
+        if (x[0] >= x[4]):
+            return np.inf
+
+        std_series = asset.ema(x[1]).rolling(x[2]).std()
+        l = x[0] if std_series.iloc[-1] <= (x[3]/100) else x[4]
+        _, asset.df["resistance"] = asset.support_resistance(l)
+        asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+        cols_to_use.append("resistance")
+        
+        i = 5
+        if x[i]:
+            asset.df["rsi"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]) > (x[i+4]/1000)
+            cols_to_use.append("rsi")
+        
+        i = 10
+        if x[i]:
+            asset.df["sma"] = asset.sma_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("sma")
+
 
         if len(cols_to_use) == 0:
             return np.inf
@@ -197,7 +218,7 @@ class TATunning(ElementwiseProblem):
         x = [ rounding(i, xx) for i, xx in enumerate(x) ]
 
         f = [ self.my_obj_func( asset, x ) for asset in self.assets ]    
-        out["F"] = [ np.median( f )]
+        out["F"] = [ np.min( f )] # change for support and resistance
 
 def prep_asset( symbl ):
     asset = Asset(
@@ -217,20 +238,23 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 300
+    gen = 5
 
     assets = [ prep_asset(i) for i in symbols ]
 
     # initialize the thread pool and create the runner
-    n_threads = 8
+    n_threads = 5
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
 
     problem = TATunning(
         assets = assets,                                                         
-        n_var = 26,# 24,
-        xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
-        xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
+        # n_var = 26,# 24,
+        # xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
+        # xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
+        n_var = 14,# 24,
+        xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
+        xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
@@ -305,7 +329,7 @@ def main(symbols, algorithm_name):
             "param":X
         }
     
-    with open( f"results/metaheuristics/FixBuy_newRSIslope_plus_EMAslope_{algorithm_name}_{gen}.json", "w" ) as fp:
+    with open( f"results/metaheuristics/SupporResistance_RSIslope_EMAslope_{algorithm_name}_{gen}.json", "w" ) as fp:
         json.dump( data, fp )
     
     pool.close()
