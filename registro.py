@@ -19,7 +19,7 @@ def  futures(value = None):
 
 def simple_earn():
     """ Date, symbol, total amount, est APR, Est Total Value (in BTC and Mex) """
-    registro = [ datetime.today().strftime( "%Y-%m-%d %H:%M" ), "cake", 2.56486025, 6.2, 0.0005004, 218.91  ]
+    registro = [ datetime.today().strftime( "%Y-%m-%d %H:%M" ), "cake", 2.57793005, 6.2, 0.00039081, 189.13  ]
     df  = pd.DataFrame([registro])
 
     df.to_csv( PWD("binance/staking.csv") , index = False, header=False, mode = "a")
