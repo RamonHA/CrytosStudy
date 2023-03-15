@@ -59,42 +59,49 @@ def analysis(asset):
         Based on results of 100gen pymoo_test
     """
 
-    l = 15 if asset.ema(20).rolling(30).sdt().iloc[-1] <= 0.5 else 9
-    asset.df["support"], asset.df["resistance"] = asset.support_resistance(l)
-    asset.df["rsi"] = asset.rsi_smoth_slope(10, 5, 2)
-    
+    l = 9 if asset.ema(27).rolling(20).sdt().iloc[-1] <= 0.7421 else 18
+    _, asset.df["resistance"] = asset.support_resistance(l)
+    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
+    asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
 
     # asset.df["rsi_main"] = asset.rsi(7)
     # asset.df["rsi1"] = asset.ema(3, target = "rsi_main" ) # asset.rsi_smoth(7, 3)
     # asset.df["rsi2"] = asset.ema(7, target = "rsi_main") # asset.rsi_smoth(7, 7)
 
-    asset.df["rsi1"] = asset.rsi_smoth(10, 3)
-    asset.df["rsi2"] = asset.rsi_smoth(10, 7)
+    # asset.df["rsi1"] = asset.rsi_smoth(10, 3)
+    # asset.df["rsi2"] = asset.rsi_smoth(10, 7)
 
-    asset.df["rsi2_slope"] = asset.rsi_smoth_slope(10, 10, 3) # asset.df["rsi2"].pct_change(3)
+    # asset.df["rsi2_slope"] = asset.rsi_smoth_slope(10, 10, 3) # asset.df["rsi2"].pct_change(3)
 
-    asset.df["ema1"] = asset.ema(8)
-    asset.df["ema2"] = asset.ema(16)
+    # asset.df["ema1"] = asset.ema(8)
+    # asset.df["ema2"] = asset.ema(16)
 
-    asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
-    asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
+    # asset.df["rsi"] = (asset.df["rsi1"] > asset.df["rsi2"]).astype(int).diff().rolling(2).sum()
+    # asset.df["ema"] = (asset.df["ema1"] > asset.df["ema2"]).astype(int).diff().rolling(2).sum()
 
-    asset.df["rsi_thr"] = (asset.rsi( 10 ) > 75).rolling(20).sum()
+    # asset.df["rsi_thr"] = (asset.rsi( 10 ) > 75).rolling(20).sum()
 
-    asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(15).std()
+    # asset.df[ "rsi_std" ] = asset.rsi_smoth(10,10).rolling(15).std()
 
-    asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(6).sum()
+    # asset.df["market_tendency"] = (asset.ema(30) >= asset.df["close"]).rolling(6).sum()
 
     d = asset.df.iloc[-1].to_dict()
 
+    # return (
+    #     d["rsi"] > 0 and        # rsi fast above slow
+    #     d["ema"] > 0 and        # ema fast above slow
+    #     d["rsi_thr"] == 0 and   # rsi max point
+    #     d["rsi2"] < 56 and      # rsi min point
+    #     d["rsi2_slope"] > 0 and # rsi slope,
+    #     d["rsi_std"] > 1.5 and    # Ensure volatility. Low volatility refers to steady price or side-trend
+    #     d["market_tendency"] == 0
+    # )
+
     return (
-        d["rsi"] > 0 and        # rsi fast above slow
-        d["ema"] > 0 and        # ema fast above slow
-        d["rsi_thr"] == 0 and   # rsi max point
-        d["rsi2"] < 56 and      # rsi min point
-        d["rsi2_slope"] > 0 and # rsi slope,
-        d["rsi_std"] > 1.5 and    # Ensure volatility. Low volatility refers to steady price or side-trend
-        d["market_tendency"] == 0
+        d["resistance"] and 
+        d["rsi"] and 
+        d["sma"]
     )
 
 # @timing
