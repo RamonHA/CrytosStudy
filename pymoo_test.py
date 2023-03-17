@@ -238,12 +238,12 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 5
+    gen = 100
 
     assets = [ prep_asset(i) for i in symbols ]
 
     # initialize the thread pool and create the runner
-    n_threads = 5
+    n_threads = 7
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
 
