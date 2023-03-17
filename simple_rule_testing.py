@@ -7,10 +7,11 @@ import pandas as pd
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 import multiprocessing as mp
+import plotly.express as xp
 
 np.random.seed(1)
 
-assets = np.random.choice( list( get_assets()["binance"].keys() ), 10 )
+assets = np.random.choice( list( get_assets()["binance"].keys() ), 40 )
 
 def sell_column(asset, target ):
     asset.df["sell"] = False
@@ -82,10 +83,74 @@ def single_asset(symbol):
     print(results)
 
 
+def seasonality(symbol):
+    asset = Asset(
+        symbol,
+        start = datetime(2023,3,10),
+        end = datetime(2023,3,16, 12), # At least 3000 records
+        frequency="3min",
+        broker = "binance",
+        fiat = "USDT",
+        source="db"
+    )
+
+    if asset is None or len(asset.df) == 0:
+        return []
+
+    asset.df["trend"] = asset.ema(60)
+    asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
+    asset.df["season"] = asset.sma( 30, target = "trend_res" )
+    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
+
+    seasonal = asset.df[["season"]].dropna()
+
+    # sampling rate
+    sr = len(seasonal)
+    # sampling interval
+    ts = 1/sr
+    t = np.arange(0,1,ts)
+
+    # r = round(seasonal["season"].std(), ndigits=2)
+    r = seasonal["season"].std()
+    
+    reg = []
+    for i in range(4, 34, 1):
+        y = np.sin(np.pi*i*t) * r
+
+        seasonal["sin"] = y
+
+        error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
+
+        reg.append([ i, error ])
+
+    reg = pd.DataFrame(reg, columns = ["freq", "error"])
+    i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
+    y = np.sin(np.pi*i*t)*r
+
+    zeros = np.zeros(len(asset.df) - len(y))
+    asset.df[ "sin" ] = zeros.tolist() + y.tolist()
+    asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
+
+    asset = sell_column( asset, 0.002 )
+
+    df = rule_validation(asset)
+
+    ret = df["acc"].iloc[-1] if len(df) > 0 else 0
+    min_ = df["returns"].min() if len(df) > 0 else 0
+
+    return [ symbol, i, ret , min_ , r]
+
+
 def main():
     symbol = assets[0]
-    single_asset( symbol )
+    single_asset( symbol ) 
 
     
 if __name__ == "__main__":
-    main()
+    # main()
+    results = [ seasonality(symbol) for symbol in assets ]
+
+    results = pd.DataFrame(results, columns = ["symbol", "freq", "acc", "max drawdown", "std"]).dropna()
+
+    print(results["acc"].mean())
+    print(results["max drawdown"].min())
