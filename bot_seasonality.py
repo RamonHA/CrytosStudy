@@ -80,11 +80,18 @@ def analysis(asset):
     for i in range(8, 30, 1):
         y = np.sin(np.pi*i*t) * r
 
+        if len(y) != len(seasonal):
+            continue
+
         seasonal["sin"] = y
 
         error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
 
         reg.append([ i, error ])
+
+    if len(reg) == 0:
+        print(f"  symbol {asset.symbol} no reg")
+        return False
 
     reg = pd.DataFrame(reg, columns = ["freq", "error"])
     i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
