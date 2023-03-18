@@ -24,7 +24,7 @@ from registro import futures
 L = 3
 PCT = 1.0015
 SHARE = .03
-LEVERAGE = 30
+LEVERAGE = 20
 
 bi = Binance(symbol="")
 
@@ -43,8 +43,8 @@ def analyze_single(s, f):
             fiat = f,
             frequency= f"{L}min",
             end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*150 ),
-            from_ = "ext_api",
+            start = datetime.now() - timedelta(seconds= 60*L*300 ),
+            source = "ext_api",
             broker="binance"
         )
 
@@ -101,10 +101,21 @@ def analysis(asset):
     asset.df[ "sin" ] = zeros.tolist() + y.tolist()
     asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
 
+
+    l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
+    _, asset.df["resistance"] = asset.support_resistance(l)
+    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
+    asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
+
     d = asset.df.iloc[-1].to_dict()
 
     return (
-        d["buy"] 
+        d["buy"] or (
+            d["resistance"] and 
+            d["rsi"] and 
+            d["sma"]
+        )
     )
 
 # @timing
