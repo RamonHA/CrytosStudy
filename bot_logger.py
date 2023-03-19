@@ -172,6 +172,8 @@ def analyze():
 
 # @timing
 def set_orders(symbol):
+    logging.info(f"Set order for: {symbol}")
+
     bi = Binance(symbol="")
 
     symbol = "{}USDT".format(symbol)
