@@ -176,7 +176,21 @@ class TATunning(ElementwiseProblem):
         if x[i]:
             asset.df["sma"] = asset.sma_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
             cols_to_use.append("sma")
+        
+        i = 14
+        if x[i]:
+            cols_to_use.append("rsi_std")
+            asset.df[ "rsi_std" ] = asset.rsi_smoth(x[i+1],x[i+2]).rolling(x[i+3]).std() < (x[i+4]/10)
+        
+        i = 19
+        if x[i]:
+            cols_to_use.append("rsi_thr")
+            asset.df["rsi_thr"] = (asset.rsi( x[i+1] ) > x[i+2]).rolling(x[i+3]).sum() == 0
 
+        i = 23
+        if x[i]:
+            cols_to_use.append("ema_std")
+            asset.df[ "ema_std" ] = asset.ema(x[i+1]).rolling(x[i+2]).std() < (x[i+3]/10)
 
         if len(cols_to_use) == 0:
             return np.inf
@@ -252,9 +266,9 @@ def main(symbols, algorithm_name):
         # n_var = 26,# 24,
         # xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
         # xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
-        n_var = 14,# 24,
-        xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
-        xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
+        n_var = 27,# 24,
+        xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10, 0 , 5, 2, 3, 2, 0, 5, 50, 3, 0, 5, 3, 2],
+        xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10, 1, 30, 15, 20, 20, 1, 30, 80, 20, 1, 50, 20, 20],
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
