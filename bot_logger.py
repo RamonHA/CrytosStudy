@@ -29,6 +29,9 @@ PCT = 1.0015
 SHARE = .03
 LEVERAGE = 20
 
+BOT_COUNTER = 0
+
+
 bi = Binance(symbol="")
 
 futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
@@ -225,6 +228,9 @@ def set_orders(symbol):
     if orderBuy is None:
         print(f"Error with buy order for {symbol} due rounding")
         return None
+    
+    # Check buy order
+
     print("Buy order done!")
     futures(balance)
     time.sleep(3)
@@ -281,6 +287,8 @@ def set_orders(symbol):
         print(f"Error with sell order for {symbol} due rounding")
         return None
     print("Sell order done!")
+
+    # Check sell order
 
     orderSell["leverage"] = leverage
     orderSell["balance"] = balance
@@ -363,6 +371,8 @@ def main():
         # print("\n")
         # return 0
     
+    logging.info( f"Strategy selected assets: { ','.join( [ i['symbol'] for i in orders ] ) }" )
+
     symbol = orders[0]["symbol"]
 
     bad_symbols = ["SC", "RAY"]
@@ -392,7 +402,11 @@ def main():
     return orderSell
 
 def bot():
-        
+
+    BOT_COUNTER += 1
+
+    logging.info( f"Bot counter: {BOT_COUNTER}" )
+
     orderSell = main()
 
     if not isinstance(orderSell, dict):
@@ -432,16 +446,14 @@ def get_orders():
 
 if __name__ == "__main__":
 
-    logging.basicConfig(filename= f"{Path(__file__).stem}_{date.today()}.log", level=logging.INFO)
+
+    logging.basicConfig(filename= f"logs/{Path(__file__).stem}_{date.today()}.log", level=logging.INFO)
 
     logging.info(f'Interval: {L}')
     logging.info(f'PCT: {PCT}')
     logging.info(f'Share: {SHARE}')
     logging.info(f'Leverage: {LEVERAGE}')
     logging.info(f'Assets: { ",".join(trading_pairs) }')
-
-    
-
 
     bot()
     # get_orders()
