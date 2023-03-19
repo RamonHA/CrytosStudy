@@ -158,34 +158,71 @@ class TATunning(ElementwiseProblem):
         # #     cols_to_use.append("dema_sma")
         # #     asset.df["dema_sma"] = asset.dema( x[22] ) > asset.sma( x[23] )
 
-        if (x[0] >= x[4]):
-            return np.inf
+        # if (x[0] >= x[4]):
+        #     return np.inf
 
-        std_series = asset.ema(x[1]).rolling(x[2]).std()
-        l = x[0] if std_series.iloc[-1] <= (x[3]/100) else x[4]
-        _, asset.df["resistance"] = asset.support_resistance(l)
-        asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-        cols_to_use.append("resistance")
+        # std_series = asset.ema(x[1]).rolling(x[2]).std()
+        # l = x[0] if std_series.iloc[-1] <= (x[3]/100) else x[4]
+        # _, asset.df["resistance"] = asset.support_resistance(l)
+        # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+        # cols_to_use.append("resistance")
         
-        i = 5
+        # i = 5
+        # if x[i]:
+        #     asset.df["rsi"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]) > (x[i+4]/1000)
+        #     cols_to_use.append("rsi")
+        
+        # i = 10
+        # if x[i]:
+        #     asset.df["sma"] = asset.sma_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
+        #     cols_to_use.append("sma")
+
+        # Slopes
+        i = 0
         if x[i]:
             asset.df["rsi"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]) > (x[i+4]/1000)
             cols_to_use.append("rsi")
+            i += 5
         
-        i = 10
+        if x[i]:
+            asset.df["rsi2"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]) > (x[i+4]/1000)
+            cols_to_use.append("rsi2")
+            i += 5
+
         if x[i]:
             asset.df["sma"] = asset.sma_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
             cols_to_use.append("sma")
+            i += 4
         
-        i = 14
         if x[i]:
-            cols_to_use.append("rsi_std")
-            asset.df[ "rsi_std" ] = asset.rsi_smoth(x[i+1],x[i+2]).rolling(x[i+3]).std() < (x[i+4]/10)
+            asset.df["ema"] = asset.ema_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("ema")
+            i += 4
         
-        i = 19
         if x[i]:
-            cols_to_use.append("rsi_thr")
-            asset.df["rsi_thr"] = (asset.rsi( x[i+1] ) > x[i+2]).rolling(x[i+3]).sum() == 0
+            asset.df["dema"] = asset.dema(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("dema")
+            i += 4
+        
+        if x[i]:
+            asset.df["hull_twma"] = asset.hull_twma(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("hull_twma")
+            i += 4
+
+        if x[i]:
+            asset.df["cci"] = asset.cci_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("cci")
+            i += 4
+
+        if x[i]:
+            asset.df["roc"] = asset.roc(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("roc")
+            i += 4
+        
+        if x[i]:
+            asset.df["vwap"] = asset.vwap(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
+            cols_to_use.append("vwap")
+            i += 4
 
         i = 23
         if x[i]:
@@ -266,9 +303,12 @@ def main(symbols, algorithm_name):
         # n_var = 26,# 24,
         # xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
         # xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
-        n_var = 27,# 24,
-        xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10, 0 , 5, 2, 3, 2, 0, 5, 50, 3, 0, 5, 3, 2],
-        xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10, 1, 30, 15, 20, 20, 1, 30, 80, 20, 1, 50, 20, 20],
+
+        n_var = 38,# 24,
+        # xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
+        # xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
+        xl = [0, 5, 3, 2, -10]*2 + [0, 4, 2, -10]*7 ,
+        xu = [1, 50, 20, 8, 10]*2 + [1, 50, 20, 10]*7 ,
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
