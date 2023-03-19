@@ -432,7 +432,7 @@ def bot():
         bot()
 
     # Wait for order to fill
-    bi = Binance()
+    bi = Binance(account = "futures")
     while not bi.wait(orderSell):
         print("Waiting another minute!")
         time.sleep( 60*1 )
