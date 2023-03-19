@@ -120,6 +120,7 @@ def analysis(asset):
     asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
     asset.df["rsi_smoth"] = asset.rsi_smoth( 29, 8 ).rolling( 7 ).std() < 0.7
     asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
+    asset.df["rsi_slope"] = asset.rsi_smoth_slope(10, 10, 3) > 0
 
     d = asset.df.iloc[-1].to_dict()
 
@@ -132,7 +133,8 @@ def analysis(asset):
     second = (
             d["resistance"] and 
             d["rsi_smoth"] and 
-            d["rsi_thr"]
+            d["rsi_thr"] and 
+            d["rsi_slope"]
         )
 
     if second:
@@ -183,6 +185,7 @@ def set_orders(symbol):
 
     max_leverage = [i for i in bi.client.futures_leverage_bracket() if symbol in i["symbol"]][0]["brackets"][0]["initialLeverage"]
     leverage = leverage if max_leverage >= leverage else max_leverage
+    logging.info(f"Set order leverage: {leverage}")
 
     balance = float([ i["balance"] for i in bi.client.futures_account_balance() if i["asset"] == "USDT"][0])
     price = bi.client.futures_symbol_ticker(symbol = symbol).get("price", False)
