@@ -118,7 +118,7 @@ def analysis(asset):
     l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
     _, asset.df["resistance"] = asset.support_resistance(l)
     asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 29, 8 ).rolling( 7 ) < 0.7
+    asset.df["rsi_smoth"] = asset.rsi_smoth( 29, 8 ).rolling( 7 ).std() < 0.7
     asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
 
     d = asset.df.iloc[-1].to_dict()
