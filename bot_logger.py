@@ -107,22 +107,39 @@ def analysis(asset):
     asset.df[ "sin" ] = zeros.tolist() + y.tolist()
     asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
 
+    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
+    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
+    # _, asset.df["resistance"] = asset.support_resistance(l)
+    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
+    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
 
-    l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
+    # After 19/03/2023 meta aplication
+    l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
     _, asset.df["resistance"] = asset.support_resistance(l)
     asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
-    asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
+    asset.df["rsi_smoth"] = asset.rsi_smoth( 29, 8 ).rolling( 7 ) < 0.7
+    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
 
     d = asset.df.iloc[-1].to_dict()
 
-    return (
-        d["buy"] or (
+    first = d["buy"]
+
+    if first:
+        logging.info( f"Asset {asset.symbol} fills first rule." )
+        logging.info( str(d) )
+    
+    second = (
             d["resistance"] and 
-            d["rsi"] and 
-            d["sma"]
+            d["rsi_smoth"] and 
+            d["rsi_thr"]
         )
-    )
+
+    if second:
+        logging.info( f"Asset {asset.symbol} fills second rule." )
+        logging.info( str(d) )
+
+    return ( first or second)
 
 # @timing
 def analyze():
@@ -371,7 +388,7 @@ def main():
         # print("\n")
         # return 0
     
-    logging.info( f"Strategy selected assets: { ','.join( [ i['symbol'] for i in orders ] ) }" )
+    # logging.info( f"Strategy selected assets: { ','.join( [ i['symbol'] for i in orders ] ) }" )
 
     symbol = orders[0]["symbol"]
 
