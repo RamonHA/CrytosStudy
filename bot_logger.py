@@ -419,7 +419,7 @@ def main():
     return orderSell
 
 def bot():
-
+    global BOT_COUNTER
     BOT_COUNTER += 1
 
     logging.info( f"Bot counter: {BOT_COUNTER}" )
