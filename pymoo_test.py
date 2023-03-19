@@ -224,10 +224,16 @@ class TATunning(ElementwiseProblem):
             cols_to_use.append("vwap")
             i += 4
 
-        i = 23
         if x[i]:
             cols_to_use.append("ema_std")
-            asset.df[ "ema_std" ] = asset.ema(x[i+1]).rolling(x[i+2]).std() < (x[i+3]/10)
+            asset.df[ "ema_std" ] = asset.ema(x[i+1]).rolling(x[i+2]).std() > (x[i+3]/1000)
+            i += 4
+        
+        if x[i]:
+            cols_to_use.append("rsi_std")
+            asset.df[ "rsi_std" ] = asset.rsi_smoth(x[i+1], x[i+2]).rolling(x[i+3]).std() > (x[i+4]/1000)
+            i += 5
+
 
         if len(cols_to_use) == 0:
             return np.inf
@@ -304,11 +310,11 @@ def main(symbols, algorithm_name):
         # xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
         # xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
 
-        n_var = 38,# 24,
+        n_var = 47,# 24,
         # xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
         # xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
-        xl = [0, 5, 3, 2, -10]*2 + [0, 4, 2, -10]*7 ,
-        xu = [1, 50, 20, 8, 10]*2 + [1, 50, 20, 10]*7 ,
+        xl = [0, 5, 3, 2, -10]*2 + [0, 4, 2, -10]*8 + [0, 5, 2, 4, -10],
+        xu = [1, 50, 20, 8, 10]*2 + [1, 50, 20, 10]*8 + [1, 40, 20, 22, 10],
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
