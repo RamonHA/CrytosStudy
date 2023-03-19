@@ -470,7 +470,7 @@ if __name__ == "__main__":
     logging.info(f'PCT: {PCT}')
     logging.info(f'Share: {SHARE}')
     logging.info(f'Leverage: {LEVERAGE}')
-    logging.info(f'Assets: { ",".join(trading_pairs) }')
+    logging.info(f'Assets: { ",".join([ i+j for i,j in trading_pairs ]) }')
 
     bot()
     # get_orders()
