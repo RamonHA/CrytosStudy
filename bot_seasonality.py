@@ -32,7 +32,9 @@ futures_exchange_info = bi.client.futures_exchange_info()  # request info on all
 
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 
-trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if t[-4:] == "USDT"]
+no_asset = ["USDCUSDT", "SCUSDT", "RAYUSDT"]
+
+trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in no_asset )]
 
 class Error():
     pass
@@ -398,7 +400,7 @@ def bot():
         bot()
 
     # Wait for order to fill
-    bi = Binance()
+    bi = Binance(account = "futures")
     while not bi.wait(orderSell):
         print("Waiting another minute!")
         time.sleep( 60*1 )
