@@ -26,8 +26,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0015
-SHARE = .03
-LEVERAGE = 20
+SHARE = .025
+LEVERAGE = 30
 
 BOT_COUNTER = 0
 
@@ -38,7 +38,9 @@ futures_exchange_info = bi.client.futures_exchange_info()  # request info on all
 
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 
-trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if t[-4:] == "USDT"]
+bad = ["USDCUSDT"]
+
+trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
 class Error():
     pass
@@ -66,9 +68,9 @@ def analysis(asset):
         Based on results of 100gen pymoo_test
     """
 
-    asset.df["trend"] = asset.ema(60)
+    asset.df["trend"] = asset.ema(50)
     asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
-    asset.df["season"] = asset.sma( 30, target = "trend_res" )
+    asset.df["season"] = asset.sma( 25, target = "trend_res" )
     asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
 
     seasonal = asset.df[["season"]].dropna()
@@ -115,12 +117,14 @@ def analysis(asset):
     # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
 
     # After 19/03/2023 meta aplication
+    # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
     l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
     _, asset.df["resistance"] = asset.support_resistance(l)
     asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 29, 8 ).rolling( 7 ).std() < 0.7
+    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 0.6 # < 0.7
     asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
     asset.df["rsi_slope"] = asset.rsi_smoth_slope(10, 10, 3) > 0
+    asset.df["sma"] = asset.sma_slope(30, 4) > (0) # -0.00625
 
     d = asset.df.iloc[-1].to_dict()
 
@@ -134,7 +138,8 @@ def analysis(asset):
             d["resistance"] and 
             d["rsi_smoth"] and 
             d["rsi_thr"] and 
-            d["rsi_slope"]
+            d["rsi_slope"] and 
+            d["sma"]
         )
 
     if second:
@@ -398,18 +403,24 @@ def main():
     symbol = orders[0]["symbol"]
 
     bad_symbols = ["SC", "RAY"]
-    def checker(symbol):
+    def checker(symbol, counter):
         
+        counter += 1
+
         if symbol in bad_symbols:
             if len(orders) == 1:
                 print("No good symbol to run.")
                 return None
 
-            return checker( orders[1]["symbol"] )
+            if counter > 3: # 3 porque solo hay dos simbolos malos
+                print("Counter reach 3")    
+                return None
+            
+            return checker( orders[1]["symbol"] , counter= counter)
         
         return symbol
     
-    symbol = checker(symbol)
+    symbol = checker(symbol, counter = 0)
     if symbol is None:
         return 1
 
@@ -469,7 +480,11 @@ def get_orders():
 if __name__ == "__main__":
 
 
-    logging.basicConfig(filename= f"logs/{Path(__file__).stem}_{date.today()}.log", level=logging.INFO)
+    logging.basicConfig(
+        filename= f"logs/{Path(__file__).stem}_{date.today()}.log", 
+        level=logging.INFO,
+        format = '%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s'
+    )
 
     logging.info(f'Interval: {L}')
     logging.info(f'PCT: {PCT}')
