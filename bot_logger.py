@@ -61,6 +61,17 @@ def analyze_single(s, f):
 
     return asset
 
+def slopes_strategy(asset):
+    asset.df["rsi_slope"] = asset.rsi_smoth_slope(27, 20, 4) > (5.75/1000)
+    asset.df["rsi_slope2"] = asset.rsi_smoth_slope(28, 8, 3) > (-4/1000)
+    asset.df["sma"] = asset.sma_slope( 33, 20 ) > ( 0 )
+    asset.df["dema"] = asset.dema(12).pct_change(11) > (5/1000)
+    asset.df["hull_twma"] = asset.hull_twma(7).pct_change(5) > (-4/1000)
+    asset.df["roc"] = asset.roc( 15 ).pct_change(12) > (7/1000)
+    asset.df["slopes"] = asset.df[["rsi_slope", "rsi_slope2", "sma", "dema", "hull_twma", ]].all(axis = 1)
+
+    return asset.df["slopes"]
+
 def analysis(asset):
     """  
         Last update: 7/3/2023
@@ -118,13 +129,16 @@ def analysis(asset):
 
     # After 19/03/2023 meta aplication
     # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
-    l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
-    _, asset.df["resistance"] = asset.support_resistance(l)
-    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 0.6 # < 0.7
-    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
-    asset.df["rsi_slope"] = asset.rsi_smoth_slope(10, 10, 3) > 0
-    asset.df["sma"] = asset.sma_slope(30, 4) > (0) # -0.00625
+    # l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
+    # _, asset.df["resistance"] = asset.support_resistance(l)
+    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    # asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 0.6 # < 0.7
+    # asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
+    # asset.df["rsi_slope"] = asset.rsi_smoth_slope(10, 10, 3) > 0
+    # asset.df["sma"] = asset.sma_slope(30, 4) > (0) # -0.00625
+
+    # Add slopes strategy 21/03/23
+    asset.df["slopes"] = slopes_strategy(asset)
 
     d = asset.df.iloc[-1].to_dict()
 
@@ -135,11 +149,12 @@ def analysis(asset):
         logging.info( str(d) )
     
     second = (
-            d["resistance"] and 
-            d["rsi_smoth"] and 
-            d["rsi_thr"] and 
-            d["rsi_slope"] and 
-            d["sma"]
+            # d["resistance"] and 
+            # d["rsi_smoth"] and 
+            # d["rsi_thr"] and 
+            # d["rsi_slope"] and 
+            # d["sma"]
+            d["slopes"]
         )
 
     if second:
