@@ -28,6 +28,7 @@ L = 3
 PCT = 1.0015
 SHARE = .03
 LEVERAGE = 25
+STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
 
@@ -89,7 +90,11 @@ def sandr(asset):
     l = 9 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
     _, asset.df["resistance"] = asset.support_resistance(l)
     asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 0.6 # < 0.7
+    
+    # Last change: 223/03/23
+    # Error con CTK
+    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 1.2 # < 0.7
+    
     asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
 
     # Last Change: 23/03/23
@@ -205,6 +210,12 @@ def analyze():
 
     return first_rule, second_rule
 
+def calculate_stop_price(bougth_price, leverage, pct_limit):
+
+    pct_min = pct_limit*( 1 / leverage)/100
+
+    return bougth_price*(1 - pct_min)
+
 # @timing
 def set_orders(symbol):
     logging.info(f"Set order for: {symbol}")
@@ -283,6 +294,8 @@ def set_orders(symbol):
     if orderBuy is None:
         print(f"Error with buy order for {symbol} due rounding")
         return None
+
+    logging.info( orderBuy )
     
     # Check buy order
 
@@ -310,9 +323,10 @@ def set_orders(symbol):
     price_rounding = len(str(real_price_bought).split(".")[-1])
     price_sell = real_price_bought*pct
 
-    def set_sell_order(symbol, price_sell, qty, price_rounding):
+    def set_sell_order(symbol, price_sell, qty, price_rounding, stop_price):
         try:
             price_sell = round(price_sell, price_rounding)
+            stop_price = round( stop_price, price_rounding )
 
             orderSell = bi.client.futures_create_order(
                     symbol = symbol,
@@ -321,6 +335,7 @@ def set_orders(symbol):
                     side = "SELL",
                     price = price_sell, 
                     quantity = qty,
+                    stopPrice = stop_price ,
                 )
                 
         except Exception as e:
@@ -329,7 +344,7 @@ def set_orders(symbol):
                 price_rounding -= 1
                 if price_rounding < 0:
                     return None
-                return set_sell_order(symbol, price_sell, qty, price_rounding)
+                return set_sell_order(symbol, price_sell, qty, price_rounding, stop_price)
             
             else:
                 print(type(e), e, e.__dict__)
@@ -337,11 +352,13 @@ def set_orders(symbol):
 
         return orderSell
 
-    orderSell = set_sell_order(symbol, price_sell, qty, price_rounding)
+    stop_price = calculate_stop_price(real_price_bought, leverage,  STOP_LIMIT_PCT )
+    orderSell = set_sell_order(symbol, price_sell, qty, price_rounding, stop_price)
     if orderSell is None:
         print(f"Error with sell order for {symbol} due rounding")
         return None
     print("Sell order done!")
+    logging.info( orderSell )
 
     # Check sell order
 
@@ -377,31 +394,6 @@ def wait(orderSell):
     df_trades = df_trades[ df_trades["orderId"] == orderSell["orderId"] ]
 
     if len(df_trades) > 0:
-        return True
-    
-    sold_price = float(orderSell["price"])
-    bougth_price = sold_price / PCT
-    symbol = orderSell["symbol"]
-    actual_price = float( bi.client.get_symbol_ticker(symbol = symbol)["price"] )
-
-    qty = float(orderSell["origQty"])
-    usdt_bought = sold_price * qty
-    real_leverage = usdt_bought / ( orderSell["balance"]*SHARE )
-    real_leverage = round(real_leverage)
-
-    pct_min = 1 / real_leverage
-
-    if (( actual_price / bougth_price ) - 1) < -( pct_min*0.5 ):
-        newOrderSell = bi.client.futures_create_order(
-                symbol = symbol,
-                type = "MARKET",
-                # timeInForce ="GTC",
-                side = "SELL",
-                quantity = qty,
-            )
-        
-        time.sleep(3)
-        
         return True
 
     return False
