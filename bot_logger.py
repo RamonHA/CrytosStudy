@@ -26,8 +26,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0015
-SHARE = .025
-LEVERAGE = 30
+SHARE = .03
+LEVERAGE = 25
 
 BOT_COUNTER = 0
 
@@ -68,9 +68,39 @@ def slopes_strategy(asset):
     asset.df["dema"] = asset.dema(12).pct_change(11) > (5/1000)
     asset.df["hull_twma"] = asset.hull_twma(7).pct_change(5) > (-4/1000)
     asset.df["roc"] = asset.roc( 15 ).pct_change(12) > (7/1000)
-    asset.df["slopes"] = asset.df[["rsi_slope", "rsi_slope2", "sma", "dema", "hull_twma", ]].all(axis = 1)
+    asset.df[ "rsi_thr" ] = ( asset.rsi(10) >= 70 ).rolling(20).sum() == 0
+    asset.df["slopes"] = asset.df[["rsi_slope", "rsi_slope2", "sma", "dema", "hull_twma", "rsi_thr"]].all(axis = 1)
 
     return asset.df["slopes"]
+
+def sandr(asset):
+    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
+    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
+    # _, asset.df["resistance"] = asset.support_resistance(l)
+    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
+    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
+
+    # After 19/03/2023 meta aplication
+    # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
+    asset.df["ema_std"] = asset.ema(43).rolling(19).std()
+    # max_std = asset.df["ema_std"].max()
+    # max_std = asset.df["ema_std"].max()
+    l = 9 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
+    _, asset.df["resistance"] = asset.support_resistance(l)
+    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 0.6 # < 0.7
+    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
+
+    # Last Change: 23/03/23
+    # COTI Liquidation
+    asset.df["rsi_slope"] = asset.rsi(10)
+    asset.df["rsi_slope"] = asset.ema_slope(10, 3, target = "rsi_slope") > 0
+    
+    asset.df["sma"] = asset.ema_slope(30, 4) > (0) # -0.00625
+
+    return asset.df[ [ "resistance", "rsi_smoth", "rsi_thr", "rsi_slope", "sma" ] ].all(axis = 1)
+
 
 def analysis(asset):
     """  
@@ -120,48 +150,31 @@ def analysis(asset):
     asset.df[ "sin" ] = zeros.tolist() + y.tolist()
     asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
 
-    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
-    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
-    # _, asset.df["resistance"] = asset.support_resistance(l)
-    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
-    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
-
-    # After 19/03/2023 meta aplication
-    # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
-    # l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
-    # _, asset.df["resistance"] = asset.support_resistance(l)
-    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    # asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 0.6 # < 0.7
-    # asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
-    # asset.df["rsi_slope"] = asset.rsi_smoth_slope(10, 10, 3) > 0
-    # asset.df["sma"] = asset.sma_slope(30, 4) > (0) # -0.00625
+    # Support and resistance
+    asset.df["sandr"] = sandr( asset )
 
     # Add slopes strategy 21/03/23
-    asset.df["slopes"] = slopes_strategy(asset)
+    # Error con RNDR
+    # asset.df["slopes"] = slopes_strategy(asset)
 
     d = asset.df.iloc[-1].to_dict()
 
-    first = d["buy"]
-
-    if first:
-        logging.info( f"Asset {asset.symbol} fills first rule." )
+    seasonality = d["buy"]
+    if seasonality:
+        logging.info( f"Asset {asset.symbol} fills seasonality rule." )
         logging.info( str(d) )
     
-    second = (
-            # d["resistance"] and 
-            # d["rsi_smoth"] and 
-            # d["rsi_thr"] and 
-            # d["rsi_slope"] and 
-            # d["sma"]
-            d["slopes"]
-        )
-
-    if second:
-        logging.info( f"Asset {asset.symbol} fills second rule." )
+    # slopes = d["slopes"]
+    # if slopes:
+    #     logging.info( f"Asset {asset.symbol} fills slope rule." )
+    #     logging.info( str(d) )
+    
+    sandr_ = d["sandr"]
+    if sandr_:
+        logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
         logging.info( str(d) )
 
-    return ( first or second)
+    return ( seasonality  or sandr_)
 
 # @timing
 def analyze():
