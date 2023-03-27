@@ -323,10 +323,10 @@ def set_orders(symbol):
     price_rounding = len(str(real_price_bought).split(".")[-1])
     price_sell = real_price_bought*pct
 
-    def set_sell_order(symbol, price_sell, qty, price_rounding, stop_price):
+    def set_sell_order(symbol, price_sell, qty, price_rounding):
         try:
             price_sell = round(price_sell, price_rounding)
-            stop_price = round( stop_price, price_rounding )
+            # stop_price = round( stop_price, price_rounding )
 
             orderSell = bi.client.futures_create_order(
                     symbol = symbol,
@@ -335,7 +335,7 @@ def set_orders(symbol):
                     side = "SELL",
                     price = price_sell, 
                     quantity = qty,
-                    stopPrice = stop_price ,
+                    # stopPrice = stop_price ,
                 )
                 
         except Exception as e:
@@ -344,7 +344,7 @@ def set_orders(symbol):
                 price_rounding -= 1
                 if price_rounding < 0:
                     return None
-                return set_sell_order(symbol, price_sell, qty, price_rounding, stop_price)
+                return set_sell_order(symbol, price_sell, qty, price_rounding)
             
             else:
                 print(type(e), e, e.__dict__)
@@ -352,8 +352,8 @@ def set_orders(symbol):
 
         return orderSell
 
-    stop_price = calculate_stop_price(real_price_bought, leverage,  STOP_LIMIT_PCT )
-    orderSell = set_sell_order(symbol, price_sell, qty, price_rounding, stop_price)
+    # stop_price = calculate_stop_price(real_price_bought, leverage,  STOP_LIMIT_PCT )
+    orderSell = set_sell_order(symbol, price_sell, qty, price_rounding)
     if orderSell is None:
         print(f"Error with sell order for {symbol} due rounding")
         return None
