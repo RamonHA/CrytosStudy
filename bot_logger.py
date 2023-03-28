@@ -27,7 +27,8 @@ from registro import futures
 L = 3
 PCT = 1.0015
 SHARE = .03
-LEVERAGE = 20
+LEVERAGE = 25
+STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
 
@@ -38,7 +39,9 @@ futures_exchange_info = bi.client.futures_exchange_info()  # request info on all
 
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 
-trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if t[-4:] == "USDT"]
+bad = ["USDCUSDT"]
+
+trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
 class Error():
     pass
@@ -59,6 +62,51 @@ def analyze_single(s, f):
 
     return asset
 
+def slopes_strategy(asset):
+    asset.df["rsi_slope"] = asset.rsi_smoth_slope(27, 20, 4) > (5.75/1000)
+    asset.df["rsi_slope2"] = asset.rsi_smoth_slope(28, 8, 3) > (-4/1000)
+    asset.df["sma"] = asset.sma_slope( 33, 20 ) > ( 0 )
+    asset.df["dema"] = asset.dema(12).pct_change(11) > (5/1000)
+    asset.df["hull_twma"] = asset.hull_twma(7).pct_change(5) > (-4/1000)
+    asset.df["roc"] = asset.roc( 15 ).pct_change(12) > (7/1000)
+    asset.df[ "rsi_thr" ] = ( asset.rsi(10) >= 70 ).rolling(20).sum() == 0
+    asset.df["slopes"] = asset.df[["rsi_slope", "rsi_slope2", "sma", "dema", "hull_twma", "rsi_thr"]].all(axis = 1)
+
+    return asset.df["slopes"]
+
+def sandr(asset):
+    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
+    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
+    # _, asset.df["resistance"] = asset.support_resistance(l)
+    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
+    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
+
+    # After 19/03/2023 meta aplication
+    # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
+    asset.df["ema_std"] = asset.ema(43).rolling(19).std()
+    # max_std = asset.df["ema_std"].max()
+    # max_std = asset.df["ema_std"].max()
+    l = 9 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
+    _, asset.df["resistance"] = asset.support_resistance(l)
+    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
+    
+    # Last change: 223/03/23
+    # Error con CTK
+    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 1.2 # < 0.7
+    
+    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
+
+    # Last Change: 23/03/23
+    # COTI Liquidation
+    asset.df["rsi_slope"] = asset.rsi(10)
+    asset.df["rsi_slope"] = asset.ema_slope(10, 3, target = "rsi_slope") > 0
+    
+    asset.df["sma"] = asset.ema_slope(30, 4) > (0) # -0.00625
+
+    return asset.df[ [ "resistance", "rsi_smoth", "rsi_thr", "rsi_slope", "sma" ] ].all(axis = 1)
+
+
 def analysis(asset):
     """  
         Last update: 7/3/2023
@@ -66,9 +114,9 @@ def analysis(asset):
         Based on results of 100gen pymoo_test
     """
 
-    asset.df["trend"] = asset.ema(60)
+    asset.df["trend"] = asset.ema(50)
     asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
-    asset.df["season"] = asset.sma( 30, target = "trend_res" )
+    asset.df["season"] = asset.sma( 25, target = "trend_res" )
     asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
 
     seasonal = asset.df[["season"]].dropna()
@@ -107,39 +155,31 @@ def analysis(asset):
     asset.df[ "sin" ] = zeros.tolist() + y.tolist()
     asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
 
-    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
-    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
-    # _, asset.df["resistance"] = asset.support_resistance(l)
-    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
-    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
+    # Support and resistance
+    asset.df["sandr"] = sandr( asset )
 
-    # After 19/03/2023 meta aplication
-    l = 5 if asset.ema(43).rolling(19).std().iloc[-1] <= 0.35 else 19
-    _, asset.df["resistance"] = asset.support_resistance(l)
-    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 29, 8 ).rolling( 7 ).std() < 0.7
-    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
+    # Add slopes strategy 21/03/23
+    # Error con RNDR
+    # asset.df["slopes"] = slopes_strategy(asset)
 
     d = asset.df.iloc[-1].to_dict()
 
-    first = d["buy"]
-
-    if first:
-        logging.info( f"Asset {asset.symbol} fills first rule." )
+    seasonality = d["buy"]
+    if seasonality:
+        logging.info( f"Asset {asset.symbol} fills seasonality rule." )
         logging.info( str(d) )
     
-    second = (
-            d["resistance"] and 
-            d["rsi_smoth"] and 
-            d["rsi_thr"]
-        )
-
-    if second:
-        logging.info( f"Asset {asset.symbol} fills second rule." )
+    # slopes = d["slopes"]
+    # if slopes:
+    #     logging.info( f"Asset {asset.symbol} fills slope rule." )
+    #     logging.info( str(d) )
+    
+    sandr_ = d["sandr"]
+    if sandr_:
+        logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
         logging.info( str(d) )
 
-    return ( first or second)
+    return ( seasonality  or sandr_)
 
 # @timing
 def analyze():
@@ -170,6 +210,12 @@ def analyze():
 
     return first_rule, second_rule
 
+def calculate_stop_price(bougth_price, leverage, pct_limit):
+
+    pct_min = pct_limit*( 1 / leverage)/100
+
+    return bougth_price*(1 - pct_min)
+
 # @timing
 def set_orders(symbol):
     logging.info(f"Set order for: {symbol}")
@@ -183,6 +229,7 @@ def set_orders(symbol):
 
     max_leverage = [i for i in bi.client.futures_leverage_bracket() if symbol in i["symbol"]][0]["brackets"][0]["initialLeverage"]
     leverage = leverage if max_leverage >= leverage else max_leverage
+    logging.info(f"Set order leverage: {leverage}")
 
     balance = float([ i["balance"] for i in bi.client.futures_account_balance() if i["asset"] == "USDT"][0])
     price = bi.client.futures_symbol_ticker(symbol = symbol).get("price", False)
@@ -247,6 +294,8 @@ def set_orders(symbol):
     if orderBuy is None:
         print(f"Error with buy order for {symbol} due rounding")
         return None
+
+    logging.info( orderBuy )
     
     # Check buy order
 
@@ -277,6 +326,7 @@ def set_orders(symbol):
     def set_sell_order(symbol, price_sell, qty, price_rounding):
         try:
             price_sell = round(price_sell, price_rounding)
+            # stop_price = round( stop_price, price_rounding )
 
             orderSell = bi.client.futures_create_order(
                     symbol = symbol,
@@ -285,6 +335,7 @@ def set_orders(symbol):
                     side = "SELL",
                     price = price_sell, 
                     quantity = qty,
+                    # stopPrice = stop_price ,
                 )
                 
         except Exception as e:
@@ -301,11 +352,13 @@ def set_orders(symbol):
 
         return orderSell
 
+    # stop_price = calculate_stop_price(real_price_bought, leverage,  STOP_LIMIT_PCT )
     orderSell = set_sell_order(symbol, price_sell, qty, price_rounding)
     if orderSell is None:
         print(f"Error with sell order for {symbol} due rounding")
         return None
     print("Sell order done!")
+    logging.info( orderSell )
 
     # Check sell order
 
@@ -342,31 +395,6 @@ def wait(orderSell):
 
     if len(df_trades) > 0:
         return True
-    
-    sold_price = float(orderSell["price"])
-    bougth_price = sold_price / PCT
-    symbol = orderSell["symbol"]
-    actual_price = float( bi.client.get_symbol_ticker(symbol = symbol)["price"] )
-
-    qty = float(orderSell["origQty"])
-    usdt_bought = sold_price * qty
-    real_leverage = usdt_bought / ( orderSell["balance"]*SHARE )
-    real_leverage = round(real_leverage)
-
-    pct_min = 1 / real_leverage
-
-    if (( actual_price / bougth_price ) - 1) < -( pct_min*0.5 ):
-        newOrderSell = bi.client.futures_create_order(
-                symbol = symbol,
-                type = "MARKET",
-                # timeInForce ="GTC",
-                side = "SELL",
-                quantity = qty,
-            )
-        
-        time.sleep(3)
-        
-        return True
 
     return False
 
@@ -395,18 +423,24 @@ def main():
     symbol = orders[0]["symbol"]
 
     bad_symbols = ["SC", "RAY"]
-    def checker(symbol):
+    def checker(symbol, counter):
         
+        counter += 1
+
         if symbol in bad_symbols:
             if len(orders) == 1:
                 print("No good symbol to run.")
                 return None
 
-            return checker( orders[1]["symbol"] )
+            if counter > 3: # 3 porque solo hay dos simbolos malos
+                print("Counter reach 3")    
+                return None
+            
+            return checker( orders[1]["symbol"] , counter= counter)
         
         return symbol
     
-    symbol = checker(symbol)
+    symbol = checker(symbol, counter = 0)
     if symbol is None:
         return 1
 
@@ -466,7 +500,11 @@ def get_orders():
 if __name__ == "__main__":
 
 
-    logging.basicConfig(filename= f"logs/{Path(__file__).stem}_{date.today()}.log", level=logging.INFO)
+    logging.basicConfig(
+        filename= f"logs/{Path(__file__).stem}_{date.today()}.log", 
+        level=logging.INFO,
+        format = '%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s'
+    )
 
     logging.info(f'Interval: {L}')
     logging.info(f'PCT: {PCT}')
