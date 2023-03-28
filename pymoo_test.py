@@ -29,6 +29,7 @@ import pandas as pd
 import json
 from multiprocessing.pool import ThreadPool
 import os
+import time
 
 from trading.testers.rules_testing import rule_validation
 from trading import Asset
@@ -314,7 +315,7 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 10
+    gen = 20
 
     assets = [ prep_asset(i) for i in symbols ]
 
@@ -322,6 +323,7 @@ def main(symbols, algorithm_name):
     n_threads = 5
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
+    n_vars = 58
 
     problem = TATunning(
         assets = assets,         
@@ -330,12 +332,12 @@ def main(symbols, algorithm_name):
         # xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
         # xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
 
-        n_var = 58,# 24,
+        n_var = n_vars,# 24,
         # xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
         # xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
 
-        xl = [0, 3, 2, 2, -10]*2 + [0, 3, 2, -10]*8 + [0, 3, 2, 3, -10],
-        xu = [1, 30, 15, 8, 10]*2 + [1, 30, 15, 10]*8 + [1, 30, 15, 21, 10],
+        xl = [0, 3, 2, 2, -10, -10]*2 + [0, 3, 2, -10, -10]*8 + [0, 3, 2, 3, -10, -10],
+        xu = [1, 30, 15, 8, 10, 10]*2 + [1, 30, 15, 10, 10]*8 + [1, 30, 15, 21, 10, 10],
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
@@ -375,12 +377,15 @@ def main(symbols, algorithm_name):
 
     termination = get_termination("n_gen", gen)
 
+    st = time.time()
     res = minimize(problem,
                algorithm,
                termination,
                seed=1,
                save_history=True,
                verbose=True)
+
+    total_time = time.time() - st
 
     X = res.X
     F = res.F
@@ -407,7 +412,10 @@ def main(symbols, algorithm_name):
 
     data = {
             "acc": 1 / best_acc,
-            "param":X
+            "param":X,  
+            "time":total_time,
+            "n_threads": n_threads,
+            "n_vars":n_vars
         }
     
 
