@@ -28,6 +28,7 @@ from datetime import date, datetime
 import pandas as pd
 import json
 from multiprocessing.pool import ThreadPool
+import os
 
 from trading.testers.rules_testing import rule_validation
 from trading import Asset
@@ -251,6 +252,8 @@ class TATunning(ElementwiseProblem):
         
         df = rule_validation(asset)
         
+        
+
         if len(df) > 0:
             acc = df["acc"].iloc[-1]
             if acc == 0:
@@ -295,12 +298,12 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 100
+    gen = 10
 
     assets = [ prep_asset(i) for i in symbols ]
 
     # initialize the thread pool and create the runner
-    n_threads = 7
+    n_threads = 5
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
 
@@ -313,8 +316,8 @@ def main(symbols, algorithm_name):
         n_var = 47,# 24,
         # xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
         # xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
-        xl = [0, 5, 3, 2, -10]*2 + [0, 4, 2, -10]*8 + [0, 5, 2, 4, -10],
-        xu = [1, 50, 20, 8, 10]*2 + [1, 50, 20, 10]*8 + [1, 40, 20, 22, 10],
+        xl = [0, 3, 2, 2, -10]*2 + [0, 3, 2, -10]*8 + [0, 3, 2, 3, -10],
+        xu = [1, 30, 15, 8, 10]*2 + [1, 30, 15, 10]*8 + [1, 30, 15, 21, 10],
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
@@ -389,8 +392,18 @@ def main(symbols, algorithm_name):
             "param":X
         }
     
-    with open( f"results/metaheuristics/SupporResistance_RSIslope_EMAslope_{algorithm_name}_{gen}.json", "w" ) as fp:
-        json.dump( data, fp )
+    path = f"results/metaheuristics/SupporResistance_RSIslope_EMAslope_{algorithm_name}_{gen}.json"
+
+    if os.path.isfile(path):
+        with open( path, "r" ) as fp:
+            past_data = json.load( fp )
+    else:
+        with open( path, "w" ) as fp:
+            json.dump( data, fp )
+
+    if past_data["acc"] < data["acc"]:
+        with open( path, "w" ) as fp:
+            json.dump( data, fp )
     
     pool.close()
 
