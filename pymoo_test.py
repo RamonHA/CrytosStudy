@@ -28,6 +28,8 @@ from datetime import date, datetime
 import pandas as pd
 import json
 from multiprocessing.pool import ThreadPool
+import os
+import time
 
 from trading.testers.rules_testing import rule_validation
 from trading import Asset
@@ -71,8 +73,9 @@ def sell_column(asset, target ):
 
 class TATunning(ElementwiseProblem):
 
-    def __init__(self, assets, **kwargs):
+    def __init__(self, assets, dias, **kwargs):
         self.assets = assets
+        self.dias = dias
         super().__init__(n_var=kwargs["n_var"],
                          n_obj=1,
                          n_ieq_constr=0,
@@ -180,59 +183,59 @@ class TATunning(ElementwiseProblem):
         # Slopes
         i = 0
         if x[i]:
-            asset.df["rsi"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]) > (x[i+4]/1000)
+            asset.df["rsi"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]).between(x[i+4]/1000, x[i+5]/1000)
             cols_to_use.append("rsi")
-            i += 5
+            i += 6
         
         if x[i]:
-            asset.df["rsi2"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]) > (x[i+4]/1000)
+            asset.df["rsi2"] = asset.rsi_smoth_slope(x[i+1], x[i+2], x[i+3]).between(x[i+4]/1000, x[i+5]/1000)
             cols_to_use.append("rsi2")
+            i += 6
+
+        if x[i]:
+            asset.df["sma"] =   asset.sma_slope(x[i+1], x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
+            cols_to_use.append("sma")
+            i += 5
+        
+        if x[i]:
+            asset.df["ema"] =  asset.ema_slope(x[i+1], x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
+            cols_to_use.append("ema")
+            i += 5
+        
+        if x[i]:
+            asset.df["dema"] =  asset.dema(x[i+1]).pct_change(x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
+            cols_to_use.append("dema")
+            i += 5
+        
+        if x[i]:
+            asset.df["hull_twma"] =  asset.hull_twma(x[i+1]).pct_change(x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
+            cols_to_use.append("hull_twma")
             i += 5
 
         if x[i]:
-            asset.df["sma"] = asset.sma_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
-            cols_to_use.append("sma")
-            i += 4
-        
-        if x[i]:
-            asset.df["ema"] = asset.ema_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
-            cols_to_use.append("ema")
-            i += 4
-        
-        if x[i]:
-            asset.df["dema"] = asset.dema(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
-            cols_to_use.append("dema")
-            i += 4
-        
-        if x[i]:
-            asset.df["hull_twma"] = asset.hull_twma(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
-            cols_to_use.append("hull_twma")
-            i += 4
-
-        if x[i]:
-            asset.df["cci"] = asset.cci_slope(x[i+1], x[i+2]) > (x[i+3]/1000)
+            asset.df["cci"] =  asset.cci_slope(x[i+1], x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
             cols_to_use.append("cci")
-            i += 4
+            i += 5
 
         if x[i]:
-            asset.df["roc"] = asset.roc(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
+            asset.df["roc"] = asset.roc(x[i+1]).pct_change(x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
             cols_to_use.append("roc")
-            i += 4
+            i += 5
         
         if x[i]:
-            asset.df["vwap"] = asset.vwap(x[i+1]).pct_change(x[i+2]) > (x[i+3]/1000)
+            asset.df["vwap"] = asset.vwap(x[i+1]).pct_change(x[i+2]).between(x[i+3]/1000, x[i+4]/1000)
             cols_to_use.append("vwap")
-            i += 4
+            i += 5
 
         if x[i]:
             cols_to_use.append("ema_std")
-            asset.df[ "ema_std" ] = asset.ema(x[i+1]).rolling(x[i+2]).std() > (x[i+3]/1000)
-            i += 4
+            asset.df[ "ema_std" ] =  asset.ema(x[i+1]).rolling(x[i+2]).std().between(x[i+3]/1000, x[i+4]/1000)
+            i += 5
         
         if x[i]:
             cols_to_use.append("rsi_std")
-            asset.df[ "rsi_std" ] = asset.rsi_smoth(x[i+1], x[i+2]).rolling(x[i+3]).std() > (x[i+4]/1000)
-            i += 5
+            asset.df[ "rsi_std" ] =  asset.rsi_smoth(x[i+1], x[i+2]).rolling(x[i+3]).std().between(x[i+4]/1000, x[i+5]/1000)
+            i += 6
 
 
         if len(cols_to_use) == 0:
@@ -251,12 +254,29 @@ class TATunning(ElementwiseProblem):
         
         df = rule_validation(asset)
         
-        if len(df) > 0:
+        if len(df) >= self.dias*10: # 10 TRANSACCIONES por dia
+
             acc = df["acc"].iloc[-1]
             if acc == 0:
                 acc = np.inf
             else:
                 acc = 1 / acc
+        
+        elif len(df) >= self.dias:
+            """ Se divide entre la cantidad de dias para penalizarlo por las pocas entradas que tuvo """
+            acc = df["acc"].iloc[-1]
+            if acc == 0:
+                acc = np.inf
+            else:
+                acc = 1 / ( 1 + ((acc - 1) / self.dias) )
+        
+        elif len(df) > 0:
+            """ Se divide entre la cantidad de dias por 10 para penalizarlo por las pocas entradas que tuvo """
+            acc = df["acc"].iloc[-1]
+            if acc == 0:
+                acc = np.inf
+            else:
+                acc = 1 / ( 1 + ((acc - 1) / (self.dias*10)) )
         else:
             acc = np.inf
         
@@ -295,26 +315,29 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 100
+    gen = 20
 
     assets = [ prep_asset(i) for i in symbols ]
 
     # initialize the thread pool and create the runner
-    n_threads = 7
+    n_threads = 5
     pool = ThreadPool(n_threads)
     runner = StarmapParallelization(pool.starmap)
+    n_vars = 58
 
     problem = TATunning(
-        assets = assets,                                                         
+        assets = assets,         
+        dias = 9, # de cuantos dias se tiene registro - 1                                       
         # n_var = 26,# 24,
         # xl = [0, 5, 2, 5, 2, 0, 5, 2, 2, 0, 4, 4, 0, 5, 40, 4, 0, 40, 0, 4, 2, 0, 0, 5, 2, 2],# [ 5,3, 35, 10, 2, -1, 7, 3, 2, -1,2 ,2 , -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 10],
         # xu = [1, 36, 20, 36, 20, 1, 36, 30, 15, 1, 50, 50, 1, 36, 85, 30, 1, 85, 1, 50, 15, 1, 1, 36, 15, 20],# [ 28, 14, 90 ,120, 5, 1, 28, 14, 5, 1, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 100, 100]
 
-        n_var = 47,# 24,
+        n_var = n_vars,# 24,
         # xl = [5, 5, 5, 1, 3, 0, 5, 2, 2, -10, 0, 5, 2, -10],
         # xu = [25, 50, 30, 150, 20, 1, 30, 15, 7, 10, 1, 50, 15, 10],
-        xl = [0, 5, 3, 2, -10]*2 + [0, 4, 2, -10]*8 + [0, 5, 2, 4, -10],
-        xu = [1, 50, 20, 8, 10]*2 + [1, 50, 20, 10]*8 + [1, 40, 20, 22, 10],
+
+        xl = [0, 3, 2, 2, -10, -10]*2 + [0, 3, 2, -10, -10]*8 + [0, 3, 2, 3, -10, -10],
+        xu = [1, 30, 15, 8, 10, 10]*2 + [1, 30, 15, 10, 10]*8 + [1, 30, 15, 21, 10, 10],
         elementwise_evaluation=True,
         elementwise_runner=runner,
     )
@@ -354,12 +377,15 @@ def main(symbols, algorithm_name):
 
     termination = get_termination("n_gen", gen)
 
+    st = time.time()
     res = minimize(problem,
                algorithm,
                termination,
                seed=1,
                save_history=True,
                verbose=True)
+
+    total_time = time.time() - st
 
     X = res.X
     F = res.F
@@ -386,11 +412,25 @@ def main(symbols, algorithm_name):
 
     data = {
             "acc": 1 / best_acc,
-            "param":X
+            "param":X,  
+            "time":total_time,
+            "n_threads": n_threads,
+            "n_vars":n_vars
         }
     
-    with open( f"results/metaheuristics/SupporResistance_RSIslope_EMAslope_{algorithm_name}_{gen}.json", "w" ) as fp:
-        json.dump( data, fp )
+
+    path = f"results/metaheuristics/SupporResistance_RSIslope_EMAslope_{algorithm_name}_{gen}.json"
+
+    if os.path.isfile(path):
+        with open( path, "r" ) as fp:
+            past_data = json.load( fp )
+    else:
+        with open( path, "w" ) as fp:
+            json.dump( data, fp )
+
+    if past_data["acc"] < data["acc"]:
+        with open( path, "w" ) as fp:
+            json.dump( data, fp )
     
     pool.close()
 
