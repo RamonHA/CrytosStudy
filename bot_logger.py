@@ -26,8 +26,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0015
-SHARE = .03
-LEVERAGE = 25
+SHARE = .05
+LEVERAGE = 40
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
