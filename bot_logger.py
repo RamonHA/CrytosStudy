@@ -25,8 +25,8 @@ from registro import futures
 # historic_download( "binance", "usdt", "1min", "" )
 
 L = 3
-PCT = 1.0015
-SHARE = .05
+PCT = 1.0012
+SHARE = .03
 LEVERAGE = 40
 STOP_LIMIT_PCT = 0.5
 
@@ -87,7 +87,7 @@ def sandr(asset):
     asset.df["ema_std"] = asset.ema(43).rolling(19).std()
     # max_std = asset.df["ema_std"].max()
     # max_std = asset.df["ema_std"].max()
-    l = 9 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
+    l = 15 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
     _, asset.df["resistance"] = asset.support_resistance(l)
     asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
     
@@ -113,47 +113,49 @@ def analysis(asset):
 
         Based on results of 100gen pymoo_test
     """
-
-    asset.df["trend"] = asset.ema(50)
-    asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
-    asset.df["season"] = asset.sma( 25, target = "trend_res" )
-    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
-
-    seasonal = asset.df[["season"]].dropna()
-
-    # sampling rate
-    sr = len(seasonal)
-    # sampling interval
-    ts = 1/sr
-    t = np.arange(0,1,ts)
-
-    # r = round(seasonal["season"].std(), ndigits=2)
-    r = seasonal["season"].std()
     
-    reg = []
-    for i in range(8, 30, 1):
-        y = np.sin(np.pi*i*t) * r
+    # commented on 30/3/23
+    # because it never enters
+    # asset.df["trend"] = asset.ema(50)
+    # asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
+    # asset.df["season"] = asset.sma( 25, target = "trend_res" )
+    # asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
 
-        if len(y) != len(seasonal):
-            continue
+    # seasonal = asset.df[["season"]].dropna()
 
-        seasonal["sin"] = y
+    # # sampling rate
+    # sr = len(seasonal)
+    # # sampling interval
+    # ts = 1/sr
+    # t = np.arange(0,1,ts)
 
-        error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
+    # # r = round(seasonal["season"].std(), ndigits=2)
+    # r = seasonal["season"].std()
+    
+    # reg = []
+    # for i in range(8, 30, 1):
+    #     y = np.sin(np.pi*i*t) * r
 
-        reg.append([ i, error ])
+    #     if len(y) != len(seasonal):
+    #         continue
 
-    if len(reg) == 0:
-        print(f"  symbol {asset.symbol} no reg")
-        return False
+    #     seasonal["sin"] = y
 
-    reg = pd.DataFrame(reg, columns = ["freq", "error"])
-    i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
-    y = np.sin(np.pi*i*t)*r
+    #     error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
 
-    zeros = np.zeros(len(asset.df) - len(y))
-    asset.df[ "sin" ] = zeros.tolist() + y.tolist()
-    asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
+    #     reg.append([ i, error ])
+
+    # if len(reg) == 0:
+    #     print(f"  symbol {asset.symbol} no reg")
+    #     return False
+
+    # reg = pd.DataFrame(reg, columns = ["freq", "error"])
+    # i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
+    # y = np.sin(np.pi*i*t)*r
+
+    # zeros = np.zeros(len(asset.df) - len(y))
+    # asset.df[ "sin" ] = zeros.tolist() + y.tolist()
+    # asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
 
     # Support and resistance
     asset.df["sandr"] = sandr( asset )
@@ -164,10 +166,10 @@ def analysis(asset):
 
     d = asset.df.iloc[-1].to_dict()
 
-    seasonality = d["buy"]
-    if seasonality:
-        logging.info( f"Asset {asset.symbol} fills seasonality rule." )
-        logging.info( str(d) )
+    # seasonality = d["buy"]
+    # if seasonality:
+    #     logging.info( f"Asset {asset.symbol} fills seasonality rule." )
+    #     logging.info( str(d) )
     
     # slopes = d["slopes"]
     # if slopes:
@@ -179,7 +181,7 @@ def analysis(asset):
         logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
         logging.info( str(d) )
 
-    return ( seasonality  or sandr_)
+    return ( sandr_)
 
 # @timing
 def analyze():
