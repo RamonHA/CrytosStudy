@@ -68,7 +68,7 @@ def normalize(df, cols):
 
     return df
 
-def features(asset, clf = True):
+def features(asset, clf = True, drop = True):
  
     ori_cols = asset.df.drop(columns = ["volume"]).columns
 
@@ -125,7 +125,8 @@ def features(asset, clf = True):
     else:
         asset.df["target"] = asset.df["close"].pct_change().shift(-1)
 
-    asset.df.drop(columns = ori_cols, inplace = True)
+    if drop:
+        asset.df.drop(columns = ori_cols, inplace = True)
 
     return asset
 
