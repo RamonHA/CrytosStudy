@@ -30,8 +30,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0012
-SHARE = .02
-LEVERAGE = 10
+SHARE = .05
+LEVERAGE = 25
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
@@ -140,6 +140,10 @@ def clf_test(asset):
     split_ratio = 30/len(df)
     split_ratio = 0.25 if split_ratio < 0.25 else split_ratio
 
+    cv_split = round(1 / split_ratio)
+    if cv_split == 1:
+        return False, 0
+
     X_train, X_test, y_train, y_test = train_test_split(
         df.drop(columns = ["target"]), 
         df[["target"]], 
@@ -152,7 +156,7 @@ def clf_test(asset):
         "criterion":["gini", "entropy"]
     }
 
-    clf = GridSearchCV(RandomForestClassifier(), parameters, cv = round(1 / split_ratio))
+    clf = GridSearchCV(RandomForestClassifier(), parameters, cv = cv_split)
     clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
     precision,recall,fscore,support = precision_recall_fscore_support(y_test, y_pred, labels = [0, 1])
