@@ -123,6 +123,15 @@ def balance_dataset(df):
     return test_under
 
 def clf_test(asset):
+
+    pct = asset.df["close"].pct_change(3)
+    pct = pct.iloc[-10:]
+    pct = pct[ pct <= -0.03 ]
+
+    if len(pct) == 0:
+        print(f"{asset.symbol} has a drawdown bigger than 3%")
+        return False, 0
+
     asset = attributes(asset) # attributes(asset)
     df = prep_target(asset)
     
@@ -138,7 +147,7 @@ def clf_test(asset):
         raise Exception("DF is empty")
 
     split_ratio = 30/len(df)
-    split_ratio = 0.25 if split_ratio < 0.25 else split_ratio
+    split_ratio = 0.2 if split_ratio < 0.2 else split_ratio
 
     cv_split = round(1 / split_ratio)
     if cv_split == 1:
