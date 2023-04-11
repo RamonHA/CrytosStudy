@@ -52,14 +52,14 @@ class Error():
     pass
 
 def attributes(asset):
+    """  
+        Attributes based on feature_selection application
+    """
+    asset.df[ f"ema_90_18" ] = asset.ema_slope( 90, 18  ).apply(lambda x: round(x, 4))
+    asset.df[ f"sma_90_18" ] = asset.sma_slope( 90, 18  ).apply(lambda x: round(x, 4))
 
-    for i in [10, 30, 90]:
-        asset.df[ f"ema_{i}" ] = asset.ema_slope( i, int(i/10)  ).apply(lambda x: round(x, 4))
-        asset.df[ f"sma_{i}" ] = asset.sma_slope( i, int(i/10)  ).apply(lambda x: round(x, 4))
-
-    asset.df["trend_res"] = asset.df["close"] - asset.df["ema_30"]
-    asset.df["season"] = asset.sma( 25, target = "trend_res" )
-    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
+    asset.df["trend_res"] = asset.df["close"] - asset.ema(40)
+    asset.df["season"] = asset.sma( 20, target = "trend_res" )
 
     seasonal = asset.df[["season"]].dropna()
 
@@ -98,19 +98,18 @@ def attributes(asset):
 
     asset.df["mean"] = asset.ema(5)
     asset.df["resistance"], asset.df["support"] = asset.support_resistance(10, support = 'mean', resistance = "mean")
-    asset.df["rel_sr"] = (asset.df["mean"] - asset.df["support"]) / asset.df["resistance"]
 
-    for i in [7, 14, 21]:
-        asset.df[f"rsi_{i}"] = asset.rsi(i)
-        asset.df[f"rsi_{i}_std"] = asset.df[f"rsi_{i}"].rolling(10).std() 
-        for k in [7, 10, 14]:
-            asset.df[f"rsi_{i}_smoth_{k}"] = asset.df[f"rsi_{i}"].rolling(k).mean()
-            for j in [3, 6, 9]:
-                asset.df[f"rsi_{i}_smoth_{k}_slope_{j}"] = asset.df[f"rsi_{i}_smoth_{k}"].pct_change(j)
+    asset.df[ f"roc_21" ] = asset.roc(21)
+    asset.df[f"rsi_14_smoth_14"] = asset.rsi(14).rolling(14).mean()
+
+    asset.df["obv"] = asset.obv()
 
     return asset
 
-def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5):
+def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5, window = 20):
+    """  
+        Fix prep asset to just consider a 20 period window in front of buy sell
+    """
     df = asset.df.copy()
 
     real_stop_loss = (1/leverage)*stop_loss
@@ -120,6 +119,10 @@ def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5):
     for index in df.index:
         fulfillment = False
         possible_close = close.loc[index:]
+
+        if len(possible_close) > window:
+            possible_close = possible_close.iloc[:window]
+
         price = close[index]
         sell_price = price * (1 + pct)
         stop_limit_price = price * ( 1 - real_stop_loss )
