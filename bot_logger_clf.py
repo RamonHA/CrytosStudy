@@ -164,6 +164,9 @@ def balance_dataset(df):
 def clf_test(asset):
 
     asset = attributes(asset) # attributes(asset)
+    if not asset:
+        return False, 0
+    
     df = prep_target(asset)
     
     df.drop(columns = ["open", "low", "high", "close"], inplace = True)
