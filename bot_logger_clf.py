@@ -224,11 +224,11 @@ def analyze_single(s, f):
     if asset.df is None or len(asset.df) == 0: 
         return None
 
-    market = asset.sma(35).pct_change(3) > 0
+    market = asset.sma(30).pct_change(3) > 0
     if not market.iloc[-1]:
         return None
     
-    rsi = (asset.rsi(9) > 70).iloc[-15:].any()
+    rsi = (asset.rsi(10) > 70).iloc[-15:].any()
     if rsi:
         return None
     
