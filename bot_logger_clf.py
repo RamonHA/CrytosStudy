@@ -61,6 +61,40 @@ def attributes(asset):
     asset.df["season"] = asset.sma( 25, target = "trend_res" )
     asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
 
+    seasonal = asset.df[["season"]].dropna()
+
+    # sampling rate
+    sr = len(seasonal)
+    # sampling interval
+    ts = 1/sr
+    t = np.arange(0,1,ts)
+
+    # r = round(seasonal["season"].std(), ndigits=2)
+    r = seasonal["season"].std()
+    
+    reg = []
+    for i in range(8, 30, 1):
+        y = np.sin(np.pi*i*t) * r
+
+        if len(y) != len(seasonal):
+            continue
+
+        seasonal["sin"] = y
+
+        error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
+
+        reg.append([ i, error ])
+
+    if len(reg) == 0:
+        print(f"  symbol {asset.symbol} no reg")
+        return False
+
+    reg = pd.DataFrame(reg, columns = ["freq", "error"])
+    i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
+    y = np.sin(np.pi*i*t)*r
+
+    zeros = np.zeros(len(asset.df) - len(y))
+    asset.df[ "sin" ] = zeros.tolist() + y.tolist()
 
     asset.df["mean"] = asset.ema(5)
     asset.df["resistance"], asset.df["support"] = asset.support_resistance(10, support = 'mean', resistance = "mean")
@@ -176,7 +210,7 @@ def analyze_single(s, f):
             fiat = f,
             frequency= f"{L}min",
             end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*700 ),
+            start = datetime.now() - timedelta(seconds= 60*L*1500 ),
             source = "ext_api",
             broker="binance"
         )
