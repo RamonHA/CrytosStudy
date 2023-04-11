@@ -57,8 +57,8 @@ def attributes(asset):
         asset.df[ f"ema_{i}" ] = asset.ema_slope( i, int(i/10)  ).apply(lambda x: round(x, 4))
         asset.df[ f"sma_{i}" ] = asset.sma_slope( i, int(i/10)  ).apply(lambda x: round(x, 4))
 
-    asset.df["trend_res"] = asset.df["close"] - asset.df["ema_30"]
-    asset.df["season"] = asset.sma( 25, target = "trend_res" )
+    asset.df["trend_res"] = asset.df["close"] - asset.ema(40)
+    asset.df["season"] = asset.sma( 20, target = "trend_res" )
     asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
 
     seasonal = asset.df[["season"]].dropna()
@@ -161,6 +161,9 @@ def balance_dataset(df):
 def clf_test(asset):
 
     asset = attributes(asset) # attributes(asset)
+    if not asset:
+        return False, 0
+    
     df = prep_target(asset)
     
     df.drop(columns = ["open", "low", "high", "close"], inplace = True)
