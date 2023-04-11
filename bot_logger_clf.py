@@ -31,7 +31,7 @@ from registro import futures
 L = 3
 PCT = 1.0012
 SHARE = .05
-LEVERAGE = 25
+LEVERAGE = 40
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
@@ -39,16 +39,15 @@ BOT_COUNTER = 0
 
 bi = Binance(symbol="")
 
-# futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
+futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
 
-# trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
+trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
+bad = ["USDCUSDT"]
 
-# bad = ["USDCUSDT"]
+trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
-# trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
-
-trading_pairs = [ ("BTC", "USDT"), ("ETH", "USDT"), ("LTC", "USDT"), ("DOGE", "USDT") ]
-
+trading_pairs = trading_pairs[:25] 
+ 
 class Error():
     pass
 
@@ -57,6 +56,11 @@ def attributes(asset):
     for i in [10, 30, 90]:
         asset.df[ f"ema_{i}" ] = asset.ema_slope( i, int(i/10)  ).apply(lambda x: round(x, 4))
         asset.df[ f"sma_{i}" ] = asset.sma_slope( i, int(i/10)  ).apply(lambda x: round(x, 4))
+
+    asset.df["trend_res"] = asset.df["close"] - asset.df["ema_30"]
+    asset.df["season"] = asset.sma( 25, target = "trend_res" )
+    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
+
 
     asset.df["mean"] = asset.ema(5)
     asset.df["resistance"], asset.df["support"] = asset.support_resistance(10, support = 'mean', resistance = "mean")
@@ -69,8 +73,6 @@ def attributes(asset):
             asset.df[f"rsi_{i}_smoth_{k}"] = asset.df[f"rsi_{i}"].rolling(k).mean()
             for j in [3, 6, 9]:
                 asset.df[f"rsi_{i}_smoth_{k}_slope_{j}"] = asset.df[f"rsi_{i}_smoth_{k}"].pct_change(j)
-
-
 
     return asset
 
@@ -124,14 +126,6 @@ def balance_dataset(df):
 
 def clf_test(asset):
 
-    pct = asset.df["close"].pct_change(3)
-    pct = pct.iloc[-10:]
-    pct = pct[ pct <= -0.03 ]
-
-    if len(pct) == 0:
-        print(f"{asset.symbol} has a drawdown bigger than 3%")
-        return False, 0
-
     asset = attributes(asset) # attributes(asset)
     df = prep_target(asset)
     
@@ -143,10 +137,10 @@ def clf_test(asset):
 
     df = balance_dataset(df)
 
-    if df.empty:
-        raise Exception("DF is empty")
+    if df.empty or len(df) < 30:
+        return False, 0
 
-    split_ratio = 30/len(df)
+    split_ratio = 20/len(df)
     split_ratio = 0.2 if split_ratio < 0.2 else split_ratio
 
     cv_split = round(1 / split_ratio)
@@ -161,7 +155,7 @@ def clf_test(asset):
     )
 
     parameters = {
-        "n_estimators": [50, 100, 150],
+        "n_estimators": [50, 100, 150, 200],
         "criterion":["gini", "entropy"]
     }
 
@@ -182,12 +176,32 @@ def analyze_single(s, f):
             fiat = f,
             frequency= f"{L}min",
             end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*300 ),
+            start = datetime.now() - timedelta(seconds= 60*L*700 ),
             source = "ext_api",
             broker="binance"
         )
 
     if asset.df is None or len(asset.df) == 0: 
+        return None
+
+    market = asset.sma(35).pct_change(3) > 0
+    if not market.iloc[-1]:
+        return None
+    
+    rsi = (asset.rsi(9) > 70).iloc[-15:].any()
+    if rsi:
+        return None
+    
+    rsi = (asset.rsi_smoth_slope(14, 9, 3) > 0).iloc[-1]
+    if not rsi:
+        return None
+
+    pct = asset.df["close"].pct_change(3)
+    pct = pct.iloc[-10:]
+    pct = pct[ pct <= -0.03 ]
+
+    if len(pct) > 0:
+        print(f"{asset.symbol} has a drawdown bigger than 3%")
         return None
 
     return asset
@@ -204,7 +218,7 @@ def analysis(asset):
     if pred:
         logging.info( f"Asset {asset.symbol} fills clf rule." )
 
-    return pred
+    return asset, pred, precision
 
 # @timing
 def analyze():
@@ -216,7 +230,7 @@ def analyze():
     assets = []
 
     def myFunc(e):
-        return e['return']
+        return e['precision']
 
     with mp.Pool( mp.cpu_count() ) as pool:
         assets = pool.starmap(
@@ -225,8 +239,19 @@ def analyze():
         )
     
     assets = [ { "asset":asset } for asset in assets if asset is not None ]
-    
-    first_rule = [ {"symbol": s["asset"].symbol, "return": s["asset"].momentum(3).iloc[-1]} for s in assets if analysis(s["asset"]) ]
+
+    if len(assets) > 4:
+        assets = np.random.choice(assets, 4)
+
+    assets = [ analysis(asset["asset"]) for asset in assets ]
+
+    first_rule = [ 
+        {
+        "symbol": s.symbol, 
+        # "return": s["asset"].momentum(3).iloc[-1],
+        "precision": p
+        } for s, b, p in assets if b 
+    ]
 
     second_rule = copy(first_rule)
         
