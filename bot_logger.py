@@ -116,49 +116,50 @@ def analysis(asset):
     
     # commented on 30/3/23
     # because it never enters
-    # asset.df["trend"] = asset.ema(50)
-    # asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
-    # asset.df["season"] = asset.sma( 25, target = "trend_res" )
-    # asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
+    asset.df["trend"] = asset.ema(50)
+    asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
+    asset.df["season"] = asset.sma( 25, target = "trend_res" )
+    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
 
-    # seasonal = asset.df[["season"]].dropna()
+    seasonal = asset.df[["season"]].dropna()
 
-    # # sampling rate
-    # sr = len(seasonal)
-    # # sampling interval
-    # ts = 1/sr
-    # t = np.arange(0,1,ts)
+    # sampling rate
+    sr = len(seasonal)
+    # sampling interval
+    ts = 1/sr
+    t = np.arange(0,1,ts)
 
-    # # r = round(seasonal["season"].std(), ndigits=2)
-    # r = seasonal["season"].std()
+    # r = round(seasonal["season"].std(), ndigits=2)
+    r = seasonal["season"].std()
     
-    # reg = []
-    # for i in range(8, 30, 1):
-    #     y = np.sin(np.pi*i*t) * r
+    reg = []
+    for i in range(8, 30, 1):
+        y = np.sin(np.pi*i*t) * r
 
-    #     if len(y) != len(seasonal):
-    #         continue
+        if len(y) != len(seasonal):
+            continue
 
-    #     seasonal["sin"] = y
+        seasonal["sin"] = y
 
-    #     error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
+        error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
 
-    #     reg.append([ i, error ])
+        reg.append([ i, error ])
 
-    # if len(reg) == 0:
-    #     print(f"  symbol {asset.symbol} no reg")
-    #     return False
+    if len(reg) == 0:
+        print(f"  symbol {asset.symbol} no reg")
+        return False
 
-    # reg = pd.DataFrame(reg, columns = ["freq", "error"])
-    # i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
-    # y = np.sin(np.pi*i*t)*r
+    reg = pd.DataFrame(reg, columns = ["freq", "error"])
+    i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
+    y = np.sin(np.pi*i*t)*r
 
-    # zeros = np.zeros(len(asset.df) - len(y))
-    # asset.df[ "sin" ] = zeros.tolist() + y.tolist()
-    # asset.df["buy"] = asset.df["sin"] == asset.df["sin"].min()
+    zeros = np.zeros(len(asset.df) - len(y))
+    asset.df[ "sin" ] = zeros.tolist() + y.tolist()
+    asset.df[ "sin" ] = ( asset.df[ "sin" ] - asset.df[ "sin" ].min() ) / ( asset.df[ "sin" ].max() - asset.df[ "sin" ].min() )
+    asset.df["buy"] = asset.df["sin"] < 0.1
 
     # Support and resistance
-    asset.df["sandr"] = sandr( asset )
+    # asset.df["sandr"] = sandr( asset )
 
     # Add slopes strategy 21/03/23
     # Error con RNDR
@@ -166,22 +167,22 @@ def analysis(asset):
 
     d = asset.df.iloc[-1].to_dict()
 
-    # seasonality = d["buy"]
-    # if seasonality:
-    #     logging.info( f"Asset {asset.symbol} fills seasonality rule." )
-    #     logging.info( str(d) )
+    seasonality = d["buy"]
+    if seasonality:
+        logging.info( f"Asset {asset.symbol} fills seasonality rule." )
+        logging.info( str(d) )
     
     # slopes = d["slopes"]
     # if slopes:
     #     logging.info( f"Asset {asset.symbol} fills slope rule." )
     #     logging.info( str(d) )
     
-    sandr_ = d["sandr"]
-    if sandr_:
-        logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
-        logging.info( str(d) )
+    # sandr_ = d["sandr"]
+    # if sandr_:
+    #     logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
+    #     logging.info( str(d) )
 
-    return ( sandr_)
+    return ( seasonality )
 
 # @timing
 def analyze():

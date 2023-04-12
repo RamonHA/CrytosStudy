@@ -116,6 +116,10 @@ def attributes(asset):
 
     asset.df["obv"] = asset.obv()
 
+    # asset.df["w_buy"] = asset.william_fractals(2, order = "buy")
+    # asset.df["w_sell"] = asset.william_fractals(2, order = "sell")
+    # asset.df["engulfing"] = asset.engulfing()
+
     return asset
 
 def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5, window = 20):
