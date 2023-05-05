@@ -30,8 +30,8 @@ from registro import futures
 
 L = 3
 PCT = 1.0012
-SHARE = .05
-LEVERAGE = 40
+SHARE = .07
+LEVERAGE = 55
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
@@ -46,7 +46,7 @@ bad = ["USDCUSDT"]
 
 trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
-trading_pairs = trading_pairs[:25] 
+trading_pairs = trading_pairs[:15] 
  
 class Error():
     pass
@@ -106,7 +106,7 @@ def attributes(asset):
 
     return asset
 
-def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5, window = 20):
+def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5, window = 15):
     """  
         Fix prep asset to just consider a 20 period window in front of buy sell
     """
@@ -224,25 +224,34 @@ def analyze_single(s, f):
     if asset.df is None or len(asset.df) == 0: 
         return None
 
-    market = asset.sma(30).pct_change(3) > 0
+    market = asset.ema(10).pct_change(3) > 0
     if not market.iloc[-1]:
         return None
     
-    rsi = (asset.rsi(10) > 70).iloc[-15:].any()
-    if rsi:
+    rsi_slope = asset.rsi_smoth_slope(7,7,2)
+    if rsi_slope.iloc[-1] <= 0:
         return None
+
+    asset.df["resistance"], asset.df["support"] = asset.support_resistance(30)
+    asset.df["rel_close"] = (asset.df["close"] - asset.df["support"]) / ( (asset.df["resistance"] - asset.df["support"]) )
+    # if rel_close.iloc[-1] >  
     
-    rsi = (asset.rsi_smoth_slope(14, 9, 3) > 0).iloc[-1]
-    if not rsi:
-        return None
 
-    pct = asset.df["close"].pct_change(3)
-    pct = pct.iloc[-10:]
-    pct = pct[ pct <= -0.03 ]
+    # rsi = (asset.rsi(7) < 30).iloc[-2:].any()
+    # if rsi:
+    #     return None
+    
+    # rsi = (asset.rsi_smoth_slope(14, 9, 3) > 0).iloc[-1]
+    # if not rsi:
+    #     return None
 
-    if len(pct) > 0:
-        print(f"{asset.symbol} has a drawdown bigger than 3%")
-        return None
+    # pct = asset.df["close"].pct_change(3)
+    # pct = pct.iloc[-10:]
+    # pct = pct[ pct <= -0.03 ]
+
+    # if len(pct) > 0:
+    #     print(f"{asset.symbol} has a drawdown bigger than 3%")
+    #     return None
 
     return asset
 
@@ -257,8 +266,29 @@ def analysis(asset):
 
     if pred:
         logging.info( f"Asset {asset.symbol} fills clf rule." )
+        logging.info( str(asset.df.iloc[-1].to_dict()) )
 
     return asset, pred, precision
+
+def generic():
+    def myFunc(e):
+        return e['rel_close']
+    
+    print(f"Trading pairs: {len(trading_pairs)}")
+
+    with mp.Pool( mp.cpu_count() ) as pool:
+        assets = pool.starmap(
+            analyze_single,
+            [ (s,f) for s,f in trading_pairs ]   
+        )
+    
+    assets = [ { "asset":asset , "rel_close": asset.df["rel_close"].iloc[-1]} for asset in assets if asset is not None ]
+    print(f"After filters: {len(assets)}")
+    
+    first_rule = assets
+    first_rule.sort(key = myFunc, reverse=False)
+
+
 
 # @timing
 def analyze():
@@ -271,6 +301,8 @@ def analyze():
 
     def myFunc(e):
         return e['precision']
+    
+    print(f"Trading pairs: {len(trading_pairs)}")
 
     with mp.Pool( mp.cpu_count() ) as pool:
         assets = pool.starmap(
@@ -278,10 +310,11 @@ def analyze():
             [ (s,f) for s,f in trading_pairs ]   
         )
     
-    assets = [ { "asset":asset } for asset in assets if asset is not None ]
+    assets = [ { "asset":asset , "rel_close": asset.df["rel_close"].iloc[-1]} for asset in assets if asset is not None ]
+    print(f"After filters: {len(assets)}")
 
-    if len(assets) > 4:
-        assets = np.random.choice(assets, 4)
+    # if len(assets) > 4:
+    #     assets = np.random.choice(assets, 4)
 
     assets = [ analysis(asset["asset"]) for asset in assets ]
 
@@ -587,7 +620,7 @@ def get_orders():
 
     return df_trades
 
-if __name__ == "__main__":
+if __name__ != "__main__":
 
 
     logging.basicConfig(
