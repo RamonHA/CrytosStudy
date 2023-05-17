@@ -223,7 +223,7 @@ def analyze():
     df = pd.DataFrame(assets)
     df.sort_values(by = "forecasting", ascending=False, inplace = True)
 
-    df = df[ (~df["pred"]) ]
+    df = df[ ( df["forecasting"] > 0 )] # (~df["pred"]) &
 
     if len(df) == 0:
         return []
