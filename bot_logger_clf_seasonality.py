@@ -29,10 +29,10 @@ from registro import futures
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
 
-L = 3
-PCT = 1.0012
-SHARE = .07
-LEVERAGE = 55
+L = 5
+PCT = 1.0005
+SHARE = .05
+LEVERAGE = 20
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
@@ -609,7 +609,7 @@ def get_orders():
 
     return df_trades
 
-if __name__ != "__main__":
+if __name__ == "__main__":
 
 
     logging.basicConfig(
