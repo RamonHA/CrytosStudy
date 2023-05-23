@@ -47,7 +47,7 @@ bad = ["USDCUSDT"]
 
 trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
-trading_pairs = trading_pairs[:30] 
+trading_pairs = trading_pairs[:20] 
 
 def features_extraction(asset):
     x = np.array(range(len(asset.df))).reshape(-1, 1)
@@ -136,7 +136,6 @@ def fit_sin_brute(flat_season, scale = 0.8):
 
     return y_season
 
-
 def fit_sin(asset, mode = "brute", reg = "linear", forecasting = False):
     y, y_pred, params = {
         "linear":linear_reg,
@@ -177,6 +176,122 @@ def get_pred(asset, scale = 0.8, mode = "brute", reg = "linear", forecasting = F
 
     return r
 
+def normalize(df, cols):
+
+    for col in cols:
+        df[col] = ( df[col] - df[col].min() ) / ( df[col].max() - df[col].min() )
+
+    return df
+
+def features(asset, clf = True, drop = True, shift = True, target = True):
+ 
+    ori_cols = asset.df.drop(columns = ["volume"]).columns
+
+    for i in range( 1, 6 ):
+        asset.df[ f"shift_{i}" ] = asset.df["close"].pct_change( 1 ).shift( i )
+        asset.df[f"close_{i}"] = asset.df["close"].pct_change( i )
+
+    for i in [20, 40, 60, 80]:
+        asset.df[ f"ema_{i}"] = asset.ema(i)
+        asset.df[ f"roc_{i}" ] = asset.roc(i)
+
+        for j in range(2, 12, 3):
+            asset.df[ f"ema_{i}_slope_{j}" ] = asset.df[ f"ema_{i}" ].pct_change( j ) 
+        
+        for c in ["close", "high", "volume"]:
+            asset.df["std{}_{}".format(c, i)] = asset.df[c].rolling(i).std()
+
+    for i in [7, 14, 21]:
+        asset.df[ f"rsi_{i}"] = asset.rsi_smoth(i, 2)
+        
+        for j in range(2,7, 2):
+            asset.df[ f"rsi_{i}_slope_{j}" ] = asset.df[ f"rsi_{i}" ].pct_change( j )
+    
+    for i in [2,3,4,5,6]:
+        asset.df[f"momentum_{i}"] = asset.momentum(i)
+        asset.df[f"momentum_ema_{i}"] = asset.momentum(i, target = "ema_20")
+        asset.df[f"momentum_rsi_{i}"] = asset.momentum(i, target = "rsi_7")
+
+    asset.df["hl"] = asset.df["high"] - asset.df["low"]
+    asset.df["ho"] = asset.df["high"] - asset.df["open"]
+    asset.df["lo"] = asset.df["low"] - asset.df["open"]
+    asset.df["cl"] = asset.df["close"] - asset.df["low"]
+    asset.df["ch"] = asset.df["close"] - asset.df["high"]
+
+    asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
+    for i in [2,3,4]:
+        for j in [2,3,4]:
+            asset.df[f"oneside_gaussian_filter_slope_{i}_{j}"] = asset.oneside_gaussian_filter_slope(i,j)
+
+    asset.df["obv"] = asset.obv()
+
+    for i in [20, 40, 60]:
+        s, r = asset.support_resistance(i)
+        asset.df[ f"support_{i}" ] = ( s / asset.df["close"] ) - 1
+        asset.df[ f"resistance_{i}" ] = ( r / asset.df["close"] ) - 1
+
+    # Normalization
+    n_cols = list( set(asset.df.columns) - set(ori_cols) )
+    
+    asset.df = normalize(asset.df, cols = n_cols)
+
+    asset.df["engulfing"] = asset.engulfing()
+    asset.df["william_buy"] = asset.william_fractals(2, order = "buy").apply(lambda x : 1 if x == True else 0).rolling(5).sum()
+    asset.df["william_sell"] = asset.william_fractals(2, order = "sell").apply(lambda x : 1 if x == True else 0).rolling(5).sum()
+
+    if target:
+        if clf:
+            asset.df["target"] = asset.df["close"].pct_change().shift(-1 if shift else 0).apply(lambda x: 1 if x > 0 else 0)
+        else:
+            asset.df["target"] = asset.df["close"].pct_change().shift(-1 if shift else 0)
+    else:
+        ori_cols = list( set(ori_cols) - set(["target"]) )
+
+    if drop:
+        asset.df.drop(columns = ori_cols, inplace = True)
+
+    return asset
+
+def prep_target(asset, pct = 0.0005, leverage = 20, stop_loss = 0.5, window = 30):
+    """  
+        Fix prep asset to just consider a 20 period window in front of buy sell
+    """
+    df = asset.df.copy()
+
+    real_stop_loss = (1/leverage)*stop_loss
+    close = df["close"]
+    df["target"] = False
+
+    for index in df.index:
+        fulfillment = False
+        possible_close = close.loc[index:]
+
+        if len(possible_close) > window:
+            possible_close = possible_close.iloc[:window]
+
+        price = close[index]
+        sell_price = price * (1 + pct)
+        stop_limit_price = price * ( 1 - real_stop_loss )
+
+        sell_index = possible_close[ possible_close >= sell_price ]
+        stop_limit_index = possible_close[ possible_close <= stop_limit_price ]
+
+        if len(sell_index) == 0:
+            fulfillment = False
+        
+        else:
+            if len(stop_limit_index) == 0:
+                fulfillment = True
+            else:
+                if sell_index.index[0] > stop_limit_index.index[0]: # if stop limit is first
+                    fulfillment = False
+                else:
+                    fulfillment = True
+
+        df.loc[ index, "target" ] = fulfillment
+
+    return df
+
 def analyze_single(symbol, scale = 0.8, mode = "optimize", reg = "poly", forecasting = True):
     asset = Asset(
             symbol=symbol,
@@ -191,20 +306,31 @@ def analyze_single(symbol, scale = 0.8, mode = "optimize", reg = "poly", forecas
     if asset.df is None or len(asset.df) == 0: 
         return None
 
-    if (asset.df["close"].pct_change() == 0).iloc[-5:].all():
-        return None
+    asset.df = prep_target( asset, pct = 0.0005, window=10 )
     
-    rsi = asset.rsi_smoth_slope(15,15, 2)
-    # asset.df["rsi"] = asset.rsi(15)
-    # rsi = asset.ema_slope( 15, 2, target="rsi" )
+    asset = features( asset, clf=False, drop = True , target = False)
 
-    if all(rsi.iloc[-3:] < 0):
+    validation = asset.df.iloc[-1:].drop(columns = ["target"])
+
+    if validation.isna().any().any():
+        print(f"{symbol} has NA in validation set")
         return None
 
-    r = get_pred( asset , scale = scale, mode = mode, reg = reg, forecasting=forecasting)
-    r["symbol"] = symbol
+    asset.df = asset.df.replace( [np.inf, -np.inf], np.nan ).dropna()
 
-    return r
+    if len(asset.df) == 0:
+        return None
+
+    x_train, y_train, x_test, y_test = features_extraction(asset, train_size=1)
+
+    reg.fit( x_train, y_train )
+
+    pred = reg.predict( validation )
+
+    if pred[0]:
+        return asset.df[ "ema_40_slope_2" ].iloc[-1]
+    
+    return False
 
 # @timing
 def analyze():
@@ -220,10 +346,10 @@ def analyze():
     
     assets = [ r for r in assets if r is not None ]
 
-    df = pd.DataFrame(assets)
-    df.sort_values(by = "forecasting", ascending=False, inplace = True)
+    df = pd.DataFrame(assets, columns = ["symbol", "prediction"])
+    df.sort_values(by = "prediction", ascending=False, inplace = True)
 
-    df = df[ ( df["forecasting"] > 0 )] # (~df["pred"]) &
+    df = df[ ( df["prediction"] > 0 )] # (~df["pred"]) &
 
     if len(df) == 0:
         return []
