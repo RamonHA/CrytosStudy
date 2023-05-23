@@ -49,10 +49,20 @@ trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT"
 
 trading_pairs = trading_pairs[:20] 
 
-def features_extraction(asset):
-    x = np.array(range(len(asset.df))).reshape(-1, 1)
-    y = asset.df["close"].to_numpy().reshape(-1, 1)
-    return x, y
+def features_extraction(asset, train_size = 0.8):
+    x = asset.df.drop(columns = ["target"]).to_numpy()
+    y = asset.df["target"].to_numpy().reshape(-1, 1)
+
+    if train_size != 1:
+        train_size = int( len(x) * train_size )
+        x_train, x_test = x[ :train_size ], x[ train_size: ]
+        y_train, y_test = y[ :train_size ], y[ train_size: ]
+    else:
+        x_train = x[ :-1 ]
+        y_train = y[:-1]
+        x_test, y_test = [], []
+
+    return x_train, y_train, x_test, y_test
 
 def linear_reg(asset, forecasting = False):
     x,y = features_extraction(asset)
