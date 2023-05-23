@@ -543,7 +543,7 @@ def wait(orderSell):
         bi = Binance(symbol="")
 
         try:
-            df_trades = pd.DataFrame(bi.client.futures_account_trades())
+            df_trades = pd.DataFrame(bi.client.futures_account_trades(  ))
             break
         except (socket.gaierror, NewConnectionError, MaxRetryError, ConnectionError) as e:
             # print(e, e.__dict__)
@@ -616,11 +616,26 @@ def bot():
         bot()
 
     # Wait for order to fill
-    bi = Binance(account = "futures")
-    while not bi.wait(orderSell):
-        print("Waiting another minute!")
-        time.sleep( 60*1 )
+    for i in range(4):
 
+        try:
+            bi = Binance(account = "futures")
+            while not bi.wait(orderSell):
+                print("Waiting another minute!")
+                time.sleep( 60*L )
+
+            break
+
+        except (socket.gaierror, NewConnectionError, MaxRetryError, ConnectionError) as e:
+            # print(e, e.__dict__)
+            # raise Exception(e)
+            print( f"Exception error, iteration {i}")
+            print("Waiting another minute!")
+            time.sleep( 60*1 )
+
+        if i == 3:
+            raise Exception(e)
+        
     print("Order fill!\n\n")
 
     bot()
