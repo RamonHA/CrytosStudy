@@ -21,6 +21,8 @@ import numpy as np
 
 import numpy, scipy.optimize
 
+import socket
+from urllib3.exceptions import NewConnectionError, MaxRetryError, ConnectionError
 
 import logging
 from pathlib import Path
@@ -543,10 +545,10 @@ def wait(orderSell):
         try:
             df_trades = pd.DataFrame(bi.client.futures_account_trades())
             break
-        except Exception as e:
+        except (socket.gaierror, NewConnectionError, MaxRetryError, ConnectionError) as e:
             # print(e, e.__dict__)
             # raise Exception(e)
-            print( f"Expcetion error, iteration {i}")
+            print( f"Exception error, iteration {i}")
 
         if i == 3:
             raise Exception(e)
