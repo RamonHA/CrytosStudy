@@ -9,6 +9,7 @@ from trading import Asset
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
+from sklearn.svm import SVC
 
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
@@ -45,7 +46,7 @@ futures_exchange_info = bi.client.futures_exchange_info()  # request info on all
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 bad = ["USDCUSDT"]
 
-trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
+trading_pairs = [ t[:-4] for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
 trading_pairs = trading_pairs[:20] 
 
@@ -308,7 +309,7 @@ def analyze_single(symbol, scale = 0.8, mode = "optimize", reg = "poly", forecas
             fiat = "USDT",
             frequency= f"{L}min",
             end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*1500 ),
+            start = datetime.now() - timedelta(seconds= 60*L*1000 ),
             source = "ext_api",
             broker="binance"
         )
@@ -333,6 +334,8 @@ def analyze_single(symbol, scale = 0.8, mode = "optimize", reg = "poly", forecas
 
     x_train, y_train, x_test, y_test = features_extraction(asset, train_size=1)
 
+    reg = SVC( kernel="poly", degree=2, C=10 )
+
     reg.fit( x_train, y_train )
 
     pred = reg.predict( validation )
@@ -351,10 +354,10 @@ def analyze():
     with mp.Pool( mp.cpu_count() ) as pool:
         assets = pool.starmap(
             analyze_single,
-            [ symbol for symbol in trading_pairs ]   
+            trading_pairs
         )
     
-    assets = [ r for r in assets if r is not None ]
+    assets = [ [symbol, r] for symbol,r in zip( trading_pairs, assets) if r is not None ]
 
     df = pd.DataFrame(assets, columns = ["symbol", "prediction"])
     df.sort_values(by = "prediction", ascending=False, inplace = True)
@@ -533,12 +536,20 @@ def check_market():
     return asset
 
 def wait(orderSell):
-    bi = Binance(symbol="")
-    try:
-        df_trades = pd.DataFrame(bi.client.futures_account_trades())
-    except Exception as e:
-        print(e, e.__dict__)
-        raise Exception(e)
+    
+    for i in range(4):
+        bi = Binance(symbol="")
+
+        try:
+            df_trades = pd.DataFrame(bi.client.futures_account_trades())
+            break
+        except Exception as e:
+            # print(e, e.__dict__)
+            # raise Exception(e)
+            print( f"Expcetion error, iteration {i}")
+
+        if i == 3:
+            raise Exception(e)
 
     df_trades = df_trades[ df_trades["orderId"] == orderSell["orderId"] ]
 
@@ -632,7 +643,7 @@ if __name__ == "__main__":
     logging.info(f'PCT: {PCT}')
     logging.info(f'Share: {SHARE}')
     logging.info(f'Leverage: {LEVERAGE}')
-    logging.info(f'Assets: { ",".join([ i+j for i,j in trading_pairs ]) }')
+    logging.info(f'Assets: { ",".join( trading_pairs ) }')
 
     bot()
     # get_orders()
