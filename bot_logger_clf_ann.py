@@ -50,7 +50,7 @@ futures_exchange_info = bi.client.futures_exchange_info()  # request info on all
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 bad = ["USDCUSDT"]
 
-trading_pairs = [ t[:-4] for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
+trading_pairs = [ (t[:-4],) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
 trading_pairs = trading_pairs[:10] 
 
@@ -143,8 +143,12 @@ def analyze_single(symbol, scale = 0.8, mode = "optimize", reg = "poly", forecas
 
     if asset.df is None or len(asset.df) == 0: 
         return None
-    print(symbol)
-    model = tf.keras.models.load_model(f"results/ann/{symbol}")
+
+    try:
+        model = tf.keras.models.load_model(f"results/ann/{symbol}")
+    except Exception as e:
+        print( f"Exception with {symbol}. Exception: \n{e}" )
+        return None
 
     asset = features( asset, clf=False, drop = True , target = False)
 
@@ -172,7 +176,7 @@ def analyze():
             trading_pairs
         )
     
-    assets = [ [symbol, r] for symbol,r in zip( trading_pairs, assets) if r is not None ]
+    assets = [ [symbol[0], r] for symbol ,r in zip( trading_pairs, assets) if r is not None ]
 
     df = pd.DataFrame(assets, columns = ["symbol", "prediction"])
     df.sort_values(by = "prediction", ascending=False, inplace = True)
@@ -473,7 +477,7 @@ if __name__ == "__main__":
     logging.info(f'PCT: {PCT}')
     logging.info(f'Share: {SHARE}')
     logging.info(f'Leverage: {LEVERAGE}')
-    logging.info(f'Assets: { ",".join( trading_pairs ) }')
+    # logging.info(f'Assets: { ",".join( trading_pairs ) }')
 
     bot()
     # get_orders()
