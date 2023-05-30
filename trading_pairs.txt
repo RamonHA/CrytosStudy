@@ -1,0 +1,1 @@
+['BCH', 'XRP', 'EOS', 'LTC', 'TRX', 'ETC', 'LINK', 'XLM']

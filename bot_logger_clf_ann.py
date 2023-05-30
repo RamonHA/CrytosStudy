@@ -22,7 +22,7 @@ from copy import copy
 import numpy as np
 
 import numpy, scipy.optimize
-
+import ast
 import socket
 from urllib3.exceptions import NewConnectionError, MaxRetryError, ConnectionError
 
@@ -42,17 +42,9 @@ STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
 
-
-bi = Binance(symbol="")
-
-futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
-
-trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
-bad = ["USDCUSDT"]
-
-trading_pairs = [ (t[:-4],) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
-
-trading_pairs = trading_pairs[:10] 
+with open("trading_pairs.txt", "r") as output:
+    trading_pairs = output.read()
+    trading_pairs = ast.literal_eval( trading_pairs )
 
 def normalize(df, cols):
 

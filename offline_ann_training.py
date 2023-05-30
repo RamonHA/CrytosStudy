@@ -185,7 +185,7 @@ def features(asset, clf = True, drop = True, shift = True, target = True):
 
     return asset
 
-def pipeline(symbol, reg, error = "precision", period = 2000, balance_type = "random", shuffle = True, train_size = 0.8):
+def pipeline(symbol, reg, error = "precision", period = 3000, balance_type = "sequential", shuffle = False, train_size = 0.8):
 
     asset = get_asset( symbol, period=period, end=datetime.now() )
 
@@ -193,7 +193,7 @@ def pipeline(symbol, reg, error = "precision", period = 2000, balance_type = "ra
         print("No info from source")
         return None
     
-    asset.df = prep_target( asset, pct = 0.0005, window=10 )
+    asset.df = prep_target( asset, pct = 0.0005, window=6 )
 
     asset = features( asset, clf=False, drop = True , target=False)
 
@@ -324,14 +324,18 @@ def main():
 
     trading_pairs = [  t[:-4] for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
-    trading_pairs = trading_pairs[:10] 
+    trading_pairs = trading_pairs[2:10] 
+    print(trading_pairs)
+
+    with open("trading_pairs.txt", "w") as output:
+        output.write(str(trading_pairs))
 
     for symbol in trading_pairs:
         print(symbol)
         pipeline( 
             symbol=symbol,
             period=3000,
-            reg = ANN( epochs=200, batch_size=8, n_hidden=64 ) ,
+            reg = ANN( epochs=200, batch_size=8, n_hidden=32 ) ,
             train_size=1,   
             error = None
         )
