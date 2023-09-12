@@ -18,16 +18,18 @@ import numpy as np
 
 import logging
 from pathlib import Path
+import socket
+from urllib3.exceptions import NewConnectionError, MaxRetryError, ConnectionError
 
 from registro import futures
 
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
 
-L = 3
-PCT = 1.0012
-SHARE = .03
-LEVERAGE = 40
+L = 5
+PCT = 1.0015
+SHARE = 0.15
+LEVERAGE = 30
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
@@ -42,6 +44,8 @@ trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
 bad = ["USDCUSDT"]
 
 trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
+
+trading_pairs = trading_pairs[:20]
 
 class Error():
     pass
@@ -184,6 +188,58 @@ def analysis(asset):
 
     return ( seasonality )
 
+def analysis_2(asset):
+    """ 
+    04/09/2023 Created on dummy/test_simple_strategies 
+    """
+
+    asset.df["f1"] = asset.rsi_smoth( 15, 10 )
+    asset.df["f2"] = asset.df["f1"].rolling(10).std().between(1.35, 3.9, inclusive = "neither")
+    asset.df["f3"] = asset.ema(15).rolling(10).std() > 0.00095
+    asset.df["f4"] = asset.df["f1"].pct_change() > 0
+    asset.df["f5"] = asset.cci( 20 ) < 140
+
+    d = asset.df.iloc[-1].to_dict()
+
+    return (d["f4"] and d["f3"] and d["f2"] and d["f5"] )
+
+from scipy.ndimage import gaussian_filter1d
+
+def analysis_3(asset):
+    """  
+    10/09/2023 Created on dimmy/test_simple_strategies
+    Inflection point
+
+    Update 11/9/2023: Add rsi
+                    Add rsi_smoth_std
+    """
+    
+    # noisy data
+    raw = asset.df["close"].values
+
+    # Normalize
+    raw = ( raw - min(raw) ) / ( max(raw) - min(raw) )
+
+    # smooth
+    smooth = gaussian_filter1d(raw, 5) # 20 because there are 20 time slots in an hour
+
+    # compute second derivative
+    smooth_d2 = np.gradient(np.gradient(smooth))
+
+    # find switching points
+    infls = np.where(np.diff(np.sign(smooth_d2)))[0]
+
+    asset.df.loc[ asset.df.iloc[ infls ].index,  "inflection"] = True
+    asset.df["smoth"] = smooth
+    asset.df["smoth"] = asset.df["smoth"].diff(1) > 0
+    asset.df["rsi"] = (asset.rsi( 10 ) < 70).rolling( 6 ).sum() == 6
+
+    asset.df["rsi_smoth_std"] = asset.rsi_smoth( 10, 5 ).rolling( 5 ).std() < 3
+
+    d = asset.df.iloc[-1].to_dict()
+
+    return (d["smoth"] and d["inflection"] and d["rsi"] and d["rsi_smoth_std"])
+
 # @timing
 def analyze():
     print("Analyze")
@@ -204,7 +260,7 @@ def analyze():
     
     assets = [ { "asset":asset } for asset in assets if asset is not None ]
 
-    first_rule = [ {"symbol": s["asset"].symbol, "return": s["asset"].momentum(3).iloc[-1]} for s in assets if analysis(s["asset"]) ]
+    first_rule = [ {"symbol": s["asset"].symbol, "return": s["asset"].momentum(3).iloc[-1]} for s in assets if analysis_3(s["asset"]) ]
 
     second_rule = copy(first_rule)
         
@@ -471,11 +527,27 @@ def bot():
         bot()
 
     # Wait for order to fill
-    bi = Binance(account = "futures")
-    while not bi.wait(orderSell):
-        print("Waiting another minute!")
-        time.sleep( 60*1 )
+    for i in range(4):
 
+        try:
+            bi = Binance(account = "futures")
+            while not bi.wait(orderSell):
+                print("Waiting another minute!")
+                time.sleep( 60*L )
+
+            break
+
+        except (socket.gaierror, NewConnectionError, MaxRetryError, ConnectionError) as e:
+            # print(e, e.__dict__)
+            # raise Exception(e)
+            print( f"Exception error, iteration {i}")
+            print("Waiting another minute!")
+            time.sleep( 60*1 )
+
+        if i == 3:
+            raise Exception(e)
+        
+    
     print("Order fill!\n\n")
 
     # total_time = time.time() - st

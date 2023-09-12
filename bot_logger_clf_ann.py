@@ -45,6 +45,7 @@ BOT_COUNTER = 0
 with open("trading_pairs.txt", "r") as output:
     trading_pairs = output.read()
     trading_pairs = ast.literal_eval( trading_pairs )
+    trading_pairs = [ (s,) for s in trading_pairs ]
 
 def normalize(df, cols):
 

@@ -334,8 +334,8 @@ def main():
         print(symbol)
         pipeline( 
             symbol=symbol,
-            period=3000,
-            reg = ANN( epochs=200, batch_size=8, n_hidden=32 ) ,
+            period=4000,
+            reg = ANN( epochs=300, batch_size=8, n_hidden=32 ) ,
             train_size=1,   
             error = None
         )
