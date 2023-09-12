@@ -315,7 +315,7 @@ def main(symbols, algorithm_name):
 
     print(f"------ {algorithm_name} ------")
 
-    gen = 20
+    gen = 50
 
     assets = [ prep_asset(i) for i in symbols ]
 
@@ -424,14 +424,18 @@ def main(symbols, algorithm_name):
     if os.path.isfile(path):
         with open( path, "r" ) as fp:
             past_data = json.load( fp )
+
+        if past_data["acc"] < data["acc"]:
+                with open( path, "w" ) as fp:
+                    json.dump( data, fp )
+        else:
+            with open( path, "w" ) as fp:
+                json.dump( data, fp )
+
     else:
         with open( path, "w" ) as fp:
             json.dump( data, fp )
 
-    if past_data["acc"] < data["acc"]:
-        with open( path, "w" ) as fp:
-            json.dump( data, fp )
-    
     pool.close()
 
 
