@@ -8,6 +8,8 @@ def main():
     df["date"] = pd.to_datetime( df["date"] )
     df.set_index("date", inplace = True)
 
+    print(df.iloc[-1])
+
     df.plot()
     plt.show()
 

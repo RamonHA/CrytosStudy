@@ -68,9 +68,13 @@ def normalize(df, cols):
 
     return df
 
-def features(asset, clf = True):
+def features(asset, clf = True, drop = True, shift = True):
  
     ori_cols = asset.df.drop(columns = ["volume"]).columns
+
+    for i in range( 1, 6 ):
+        asset.df[ f"shift_{i}" ] = asset.df["close"].pct_change( 1 ).shift( i )
+        asset.df[f"close_{i}"] = asset.df["close"].pct_change( i )
 
     for i in [20, 40, 60, 80]:
         asset.df[ f"ema_{i}"] = asset.ema(i)
@@ -121,11 +125,12 @@ def features(asset, clf = True):
     asset.df["william_sell"] = asset.william_fractals(2, order = "sell").apply(lambda x : 1 if x == True else 0).rolling(5).sum()
 
     if clf:
-        asset.df["target"] = asset.df["close"].pct_change().shift(-1).apply(lambda x: 1 if x > 0 else 0)
+        asset.df["target"] = asset.df["close"].pct_change().shift(-1 if shift else 0).apply(lambda x: 1 if x > 0 else 0)
     else:
-        asset.df["target"] = asset.df["close"].pct_change().shift(-1)
+        asset.df["target"] = asset.df["close"].pct_change().shift(-1 if shift else 0)
 
-    asset.df.drop(columns = ori_cols, inplace = True)
+    if drop:
+        asset.df.drop(columns = ori_cols, inplace = True)
 
     return asset
 

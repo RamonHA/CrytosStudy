@@ -8,6 +8,10 @@ from trading import Asset
 from trading.func_aux import timing
 from trading.func_brokers import historic_download
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import precision_recall_fscore_support
+
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 import time
@@ -18,18 +22,16 @@ import numpy as np
 
 import logging
 from pathlib import Path
-import socket
-from urllib3.exceptions import NewConnectionError, MaxRetryError, ConnectionError
 
 from registro import futures
 
 # Create only when the code is going to start to automatically run every N minutes
 # historic_download( "binance", "usdt", "1min", "" )
 
-L = 5
-PCT = 1.0015
-SHARE = 0.15
-LEVERAGE = 30
+L = 3
+PCT = 1.0012
+SHARE = .07
+LEVERAGE = 55
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
@@ -40,90 +42,24 @@ bi = Binance(symbol="")
 futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
 
 trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
-
 bad = ["USDCUSDT"]
 
 trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
 
-trading_pairs = trading_pairs[:20]
-
+trading_pairs = trading_pairs[:15] 
+ 
 class Error():
     pass
 
-def analyze_single(s, f):
-    asset = Asset(
-            symbol=s,
-            fiat = f,
-            frequency= f"{L}min",
-            end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*300 ),
-            source = "ext_api",
-            broker="binance"
-        )
-
-    if asset.df is None or len(asset.df) == 0: 
-        return None
-
-    return asset
-
-def slopes_strategy(asset):
-    asset.df["rsi_slope"] = asset.rsi_smoth_slope(27, 20, 4) > (5.75/1000)
-    asset.df["rsi_slope2"] = asset.rsi_smoth_slope(28, 8, 3) > (-4/1000)
-    asset.df["sma"] = asset.sma_slope( 33, 20 ) > ( 0 )
-    asset.df["dema"] = asset.dema(12).pct_change(11) > (5/1000)
-    asset.df["hull_twma"] = asset.hull_twma(7).pct_change(5) > (-4/1000)
-    asset.df["roc"] = asset.roc( 15 ).pct_change(12) > (7/1000)
-    asset.df[ "rsi_thr" ] = ( asset.rsi(10) >= 70 ).rolling(20).sum() == 0
-    asset.df["slopes"] = asset.df[["rsi_slope", "rsi_slope2", "sma", "dema", "hull_twma", "rsi_thr"]].all(axis = 1)
-
-    return asset.df["slopes"]
-
-def sandr(asset):
-    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
-    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
-    # _, asset.df["resistance"] = asset.support_resistance(l)
-    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
-    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
-
-    # After 19/03/2023 meta aplication
-    # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
-    asset.df["ema_std"] = asset.ema(43).rolling(19).std()
-    # max_std = asset.df["ema_std"].max()
-    # max_std = asset.df["ema_std"].max()
-    l = 15 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
-    _, asset.df["resistance"] = asset.support_resistance(l)
-    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    
-    # Last change: 223/03/23
-    # Error con CTK
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 1.2 # < 0.7
-    
-    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
-
-    # Last Change: 23/03/23
-    # COTI Liquidation
-    asset.df["rsi_slope"] = asset.rsi(10)
-    asset.df["rsi_slope"] = asset.ema_slope(10, 3, target = "rsi_slope") > 0
-    
-    asset.df["sma"] = asset.ema_slope(30, 4) > (0) # -0.00625
-
-    return asset.df[ [ "resistance", "rsi_smoth", "rsi_thr", "rsi_slope", "sma" ] ].all(axis = 1)
-
-
-def analysis(asset):
+def attributes(asset):
     """  
-        Last update: 7/3/2023
-
-        Based on results of 100gen pymoo_test
+        Attributes based on feature_selection application
     """
-    
-    # commented on 30/3/23
-    # because it never enters
-    asset.df["trend"] = asset.ema(50)
-    asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
-    asset.df["season"] = asset.sma( 25, target = "trend_res" )
-    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
+    asset.df[ f"ema_90_18" ] = asset.ema_slope( 90, 18  ).apply(lambda x: round(x, 4))
+    asset.df[ f"sma_90_18" ] = asset.sma_slope( 90, 18  ).apply(lambda x: round(x, 4))
+
+    asset.df["trend_res"] = asset.df["close"] - asset.ema(40)
+    asset.df["season"] = asset.sma( 20, target = "trend_res" )
 
     seasonal = asset.df[["season"]].dropna()
 
@@ -159,86 +95,200 @@ def analysis(asset):
 
     zeros = np.zeros(len(asset.df) - len(y))
     asset.df[ "sin" ] = zeros.tolist() + y.tolist()
-    asset.df[ "sin" ] = ( asset.df[ "sin" ] - asset.df[ "sin" ].min() ) / ( asset.df[ "sin" ].max() - asset.df[ "sin" ].min() )
-    asset.df["buy"] = asset.df["sin"] < 0.1
 
-    # Support and resistance
-    # asset.df["sandr"] = sandr( asset )
+    asset.df["mean"] = asset.ema(5)
+    asset.df["resistance"], asset.df["support"] = asset.support_resistance(10, support = 'mean', resistance = "mean")
 
-    # Add slopes strategy 21/03/23
-    # Error con RNDR
-    # asset.df["slopes"] = slopes_strategy(asset)
+    asset.df[ f"roc_21" ] = asset.roc(21)
+    asset.df[f"rsi_14_smoth_14"] = asset.rsi(14).rolling(14).mean()
 
-    d = asset.df.iloc[-1].to_dict()
+    asset.df["obv"] = asset.obv()
 
-    seasonality = d["buy"]
-    if seasonality:
-        logging.info( f"Asset {asset.symbol} fills seasonality rule." )
-        logging.info( str(d) )
-    
-    # slopes = d["slopes"]
-    # if slopes:
-    #     logging.info( f"Asset {asset.symbol} fills slope rule." )
-    #     logging.info( str(d) )
-    
-    # sandr_ = d["sandr"]
-    # if sandr_:
-    #     logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
-    #     logging.info( str(d) )
+    return asset
 
-    return ( seasonality )
-
-def analysis_2(asset):
-    """ 
-    04/09/2023 Created on dummy/test_simple_strategies 
-    """
-
-    asset.df["f1"] = asset.rsi_smoth( 15, 10 )
-    asset.df["f2"] = asset.df["f1"].rolling(10).std().between(1.35, 3.9, inclusive = "neither")
-    asset.df["f3"] = asset.ema(15).rolling(10).std() > 0.00095
-    asset.df["f4"] = asset.df["f1"].pct_change() > 0
-    asset.df["f5"] = asset.cci( 20 ) < 140
-
-    d = asset.df.iloc[-1].to_dict()
-
-    return (d["f4"] and d["f3"] and d["f2"] and d["f5"] )
-
-from scipy.ndimage import gaussian_filter1d
-
-def analysis_3(asset):
+def prep_target(asset, pct = 0.0015, leverage = 20, stop_loss = 0.5, window = 15):
     """  
-    10/09/2023 Created on dimmy/test_simple_strategies
-    Inflection point
+        Fix prep asset to just consider a 20 period window in front of buy sell
+    """
+    df = asset.df.copy()
 
-    Update 11/9/2023: Add rsi
-                    Add rsi_smoth_std
+    real_stop_loss = (1/leverage)*stop_loss
+    close = df["close"]
+    df["target"] = False
+
+    for index in df.index:
+        fulfillment = False
+        possible_close = close.loc[index:]
+
+        if len(possible_close) > window:
+            possible_close = possible_close.iloc[:window]
+
+        price = close[index]
+        sell_price = price * (1 + pct)
+        stop_limit_price = price * ( 1 - real_stop_loss )
+
+        sell_index = possible_close[ possible_close >= sell_price ]
+        stop_limit_index = possible_close[ possible_close <= stop_limit_price ]
+
+        if len(sell_index) == 0:
+            fulfillment = False
+        
+        else:
+            if len(stop_limit_index) == 0:
+                fulfillment = True
+            else:
+                if sell_index.index[0] > stop_limit_index.index[0]: # if stop limit is first
+                    fulfillment = False
+                else:
+                    fulfillment = True
+
+        df.loc[ index, "target" ] = fulfillment
+
+    return df
+
+def balance_dataset(df):
+    qty_per_class = df['target'].value_counts().to_frame().sort_values(by = "target", ascending = True)
+    
+    class_true = df[df['target'] == 1]
+    class_false = df[df['target'] == 0]
+
+    if qty_per_class.index[0]:
+        class_false = class_false.sample(qty_per_class["target"].iloc[0])
+    else:
+        class_true = class_true.sample(qty_per_class["target"].iloc[0])
+
+    test_under = pd.concat([class_true, class_false], axis=0)
+
+    return test_under
+
+def clf_test(asset):
+
+    asset = attributes(asset) # attributes(asset)
+    if not asset:
+        return False, 0
+    
+    df = prep_target(asset)
+    
+    df.drop(columns = ["open", "low", "high", "close"], inplace = True)
+    df.dropna(inplace = True)
+    
+    last_row = df.iloc[-1:]
+    df = df.iloc[:-1]
+
+    df = balance_dataset(df)
+
+    if df.empty or len(df) < 30:
+        return False, 0
+
+    split_ratio = 20/len(df)
+    split_ratio = 0.2 if split_ratio < 0.2 else split_ratio
+
+    cv_split = round(1 / split_ratio)
+    if cv_split == 1:
+        return False, 0
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        df.drop(columns = ["target"]), 
+        df[["target"]], 
+        test_size=split_ratio, 
+        random_state=42
+    )
+
+    parameters = {
+        "n_estimators": [50, 100, 150, 200],
+        "criterion":["gini", "entropy"]
+    }
+
+    clf = GridSearchCV(RandomForestClassifier(), parameters, cv = cv_split)
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    precision,recall,fscore,support = precision_recall_fscore_support(y_test, y_pred, labels = [0, 1])
+    # res_cv = pd.DataFrame([precision,recall,fscore,support], index = ["precision","recall","fscore","support"])
+    pred = clf.predict(last_row.drop(columns = ["target"]))
+    logging.info(f"{asset.symbol}\tPrecision: {precision}\tBest params: ")
+    logging.info(clf.best_params_)
+
+    return pred[0], precision[-1]
+
+def analyze_single(s, f):
+    asset = Asset(
+            symbol=s,
+            fiat = f,
+            frequency= f"{L}min",
+            end = datetime.now(),
+            start = datetime.now() - timedelta(seconds= 60*L*1500 ),
+            source = "ext_api",
+            broker="binance"
+        )
+
+    if asset.df is None or len(asset.df) == 0: 
+        return None
+
+    market = asset.ema(10).pct_change(3) > 0
+    if not market.iloc[-1]:
+        return None
+    
+    rsi_slope = asset.rsi_smoth_slope(7,7,2)
+    if rsi_slope.iloc[-1] <= 0:
+        return None
+
+    asset.df["resistance"], asset.df["support"] = asset.support_resistance(30)
+    asset.df["rel_close"] = (asset.df["close"] - asset.df["support"]) / ( (asset.df["resistance"] - asset.df["support"]) )
+    # if rel_close.iloc[-1] >  
+    
+
+    # rsi = (asset.rsi(7) < 30).iloc[-2:].any()
+    # if rsi:
+    #     return None
+    
+    # rsi = (asset.rsi_smoth_slope(14, 9, 3) > 0).iloc[-1]
+    # if not rsi:
+    #     return None
+
+    # pct = asset.df["close"].pct_change(3)
+    # pct = pct.iloc[-10:]
+    # pct = pct[ pct <= -0.03 ]
+
+    # if len(pct) > 0:
+    #     print(f"{asset.symbol} has a drawdown bigger than 3%")
+    #     return None
+
+    return asset
+
+def analysis(asset):
+    """  
+        Last update: 7/3/2023
+
+        Based on results of 100gen pymoo_test
     """
     
-    # noisy data
-    raw = asset.df["close"].values
+    pred, precision = clf_test(asset)
 
-    # Normalize
-    raw = ( raw - min(raw) ) / ( max(raw) - min(raw) )
+    if pred:
+        logging.info( f"Asset {asset.symbol} fills clf rule." )
+        logging.info( str(asset.df.iloc[-1].to_dict()) )
 
-    # smooth
-    smooth = gaussian_filter1d(raw, 5) # 20 because there are 20 time slots in an hour
+    return asset, pred, precision
 
-    # compute second derivative
-    smooth_d2 = np.gradient(np.gradient(smooth))
+def generic():
+    def myFunc(e):
+        return e['rel_close']
+    
+    print(f"Trading pairs: {len(trading_pairs)}")
 
-    # find switching points
-    infls = np.where(np.diff(np.sign(smooth_d2)))[0]
+    with mp.Pool( mp.cpu_count() ) as pool:
+        assets = pool.starmap(
+            analyze_single,
+            [ (s,f) for s,f in trading_pairs ]   
+        )
+    
+    assets = [ { "asset":asset , "rel_close": asset.df["rel_close"].iloc[-1]} for asset in assets if asset is not None ]
+    print(f"After filters: {len(assets)}")
+    
+    first_rule = assets
+    first_rule.sort(key = myFunc, reverse=False)
 
-    asset.df.loc[ asset.df.iloc[ infls ].index,  "inflection"] = True
-    asset.df["smoth"] = smooth
-    asset.df["smoth"] = asset.df["smoth"].diff(1) > 0
-    asset.df["rsi"] = (asset.rsi( 10 ) < 70).rolling( 6 ).sum() == 6
 
-    asset.df["rsi_smoth_std"] = asset.rsi_smoth( 10, 5 ).rolling( 5 ).std() < 3
-
-    d = asset.df.iloc[-1].to_dict()
-
-    return (d["smoth"] and d["inflection"] and d["rsi"] and d["rsi_smoth_std"])
 
 # @timing
 def analyze():
@@ -250,7 +300,9 @@ def analyze():
     assets = []
 
     def myFunc(e):
-        return e['return']
+        return e['precision']
+    
+    print(f"Trading pairs: {len(trading_pairs)}")
 
     with mp.Pool( mp.cpu_count() ) as pool:
         assets = pool.starmap(
@@ -258,9 +310,21 @@ def analyze():
             [ (s,f) for s,f in trading_pairs ]   
         )
     
-    assets = [ { "asset":asset } for asset in assets if asset is not None ]
+    assets = [ { "asset":asset , "rel_close": asset.df["rel_close"].iloc[-1]} for asset in assets if asset is not None ]
+    print(f"After filters: {len(assets)}")
 
-    first_rule = [ {"symbol": s["asset"].symbol, "return": s["asset"].momentum(3).iloc[-1]} for s in assets if analysis_3(s["asset"]) ]
+    # if len(assets) > 4:
+    #     assets = np.random.choice(assets, 4)
+
+    assets = [ analysis(asset["asset"]) for asset in assets ]
+
+    first_rule = [ 
+        {
+        "symbol": s.symbol, 
+        # "return": s["asset"].momentum(3).iloc[-1],
+        "precision": p
+        } for s, b, p in assets if b 
+    ]
 
     second_rule = copy(first_rule)
         
@@ -527,27 +591,11 @@ def bot():
         bot()
 
     # Wait for order to fill
-    for i in range(4):
+    bi = Binance(account = "futures")
+    while not bi.wait(orderSell):
+        print("Waiting another minute!")
+        time.sleep( 60*1 )
 
-        try:
-            bi = Binance(account = "futures")
-            while not bi.wait(orderSell):
-                print("Waiting another minute!")
-                time.sleep( 60*L )
-
-            break
-
-        except (socket.gaierror, NewConnectionError, MaxRetryError, ConnectionError) as e:
-            # print(e, e.__dict__)
-            # raise Exception(e)
-            print( f"Exception error, iteration {i}")
-            print("Waiting another minute!")
-            time.sleep( 60*1 )
-
-        if i == 3:
-            raise Exception(e)
-        
-    
     print("Order fill!\n\n")
 
     # total_time = time.time() - st
@@ -572,7 +620,7 @@ def get_orders():
 
     return df_trades
 
-if __name__ == "__main__":
+if __name__ != "__main__":
 
 
     logging.basicConfig(

@@ -5,8 +5,13 @@ warnings.filterwarnings("ignore")
 
 from trading.assets.binance import Binance
 from trading import Asset
-from trading.func_aux import timing
-from trading.func_brokers import historic_download
+
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.svm import SVC
+
+import tensorflow as tf
 
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
@@ -16,10 +21,13 @@ import multiprocessing as mp
 from copy import copy
 import numpy as np
 
-import logging
-from pathlib import Path
+import numpy, scipy.optimize
+import ast
 import socket
 from urllib3.exceptions import NewConnectionError, MaxRetryError, ConnectionError
+
+import logging
+from pathlib import Path
 
 from registro import futures
 
@@ -27,36 +35,101 @@ from registro import futures
 # historic_download( "binance", "usdt", "1min", "" )
 
 L = 5
-PCT = 1.0015
-SHARE = 0.15
-LEVERAGE = 30
+PCT = 1.0005
+SHARE = .05
+LEVERAGE = 20
 STOP_LIMIT_PCT = 0.5
 
 BOT_COUNTER = 0
 
+with open("trading_pairs.txt", "r") as output:
+    trading_pairs = output.read()
+    trading_pairs = ast.literal_eval( trading_pairs )
+    trading_pairs = [ (s,) for s in trading_pairs ]
 
-bi = Binance(symbol="")
+def normalize(df, cols):
 
-futures_exchange_info = bi.client.futures_exchange_info()  # request info on all futures symbols
+    for col in cols:
+        df[col] = ( df[col] - df[col].min() ) / ( df[col].max() - df[col].min() )
 
-trading_pairs = [info['symbol'] for info in futures_exchange_info['symbols']]
+    return df
 
-bad = ["USDCUSDT"]
+def features(asset, clf = True, drop = True, shift = True, target = True):
+ 
+    ori_cols = asset.df.drop(columns = ["volume"]).columns
 
-trading_pairs = [ ( t[:-4], t[-4:] ) for t in trading_pairs if (t[-4:] == "USDT" and t not in bad)]
+    for i in range( 1, 6 ):
+        asset.df[ f"shift_{i}" ] = asset.df["close"].pct_change( 1 ).shift( i )
+        asset.df[f"close_{i}"] = asset.df["close"].pct_change( i )
 
-trading_pairs = trading_pairs[:20]
+    for i in [20, 40, 60, 80]:
+        asset.df[ f"ema_{i}"] = asset.ema(i)
+        asset.df[ f"roc_{i}" ] = asset.roc(i)
 
-class Error():
-    pass
+        for j in range(2, 12, 3):
+            asset.df[ f"ema_{i}_slope_{j}" ] = asset.df[ f"ema_{i}" ].pct_change( j ) 
+        
+        for c in ["close", "high", "volume"]:
+            asset.df["std{}_{}".format(c, i)] = asset.df[c].rolling(i).std()
 
-def analyze_single(s, f):
+    for i in [7, 14, 21]:
+        asset.df[ f"rsi_{i}"] = asset.rsi_smoth(i, 2)
+        
+        for j in range(2,7, 2):
+            asset.df[ f"rsi_{i}_slope_{j}" ] = asset.df[ f"rsi_{i}" ].pct_change( j )
+    
+    for i in [2,3,4,5,6]:
+        asset.df[f"momentum_{i}"] = asset.momentum(i)
+        asset.df[f"momentum_ema_{i}"] = asset.momentum(i, target = "ema_20")
+        asset.df[f"momentum_rsi_{i}"] = asset.momentum(i, target = "rsi_7")
+
+    asset.df["hl"] = asset.df["high"] - asset.df["low"]
+    asset.df["ho"] = asset.df["high"] - asset.df["open"]
+    asset.df["lo"] = asset.df["low"] - asset.df["open"]
+    asset.df["cl"] = asset.df["close"] - asset.df["low"]
+    asset.df["ch"] = asset.df["close"] - asset.df["high"]
+
+    asset.df["buy_wf"] = asset.william_fractals(2, shift=True)
+    for i in [2,3,4]:
+        for j in [2,3,4]:
+            asset.df[f"oneside_gaussian_filter_slope_{i}_{j}"] = asset.oneside_gaussian_filter_slope(i,j)
+
+    asset.df["obv"] = asset.obv()
+
+    for i in [20, 40, 60]:
+        s, r = asset.support_resistance(i)
+        asset.df[ f"support_{i}" ] = ( s / asset.df["close"] ) - 1
+        asset.df[ f"resistance_{i}" ] = ( r / asset.df["close"] ) - 1
+
+    # Normalization
+    n_cols = list( set(asset.df.columns) - set(ori_cols) )
+    
+    asset.df = normalize(asset.df, cols = n_cols)
+
+    asset.df["engulfing"] = asset.engulfing()
+    asset.df["william_buy"] = asset.william_fractals(2, order = "buy").apply(lambda x : 1 if x == True else 0).rolling(5).sum()
+    asset.df["william_sell"] = asset.william_fractals(2, order = "sell").apply(lambda x : 1 if x == True else 0).rolling(5).sum()
+
+    if target:
+        if clf:
+            asset.df["target"] = asset.df["close"].pct_change().shift(-1 if shift else 0).apply(lambda x: 1 if x > 0 else 0)
+        else:
+            asset.df["target"] = asset.df["close"].pct_change().shift(-1 if shift else 0)
+    else:
+        ori_cols = list( set(ori_cols) - set(["target"]) )
+
+    if drop:
+        asset.df.drop(columns = ori_cols, inplace = True)
+
+    return asset
+
+def analyze_single(symbol, scale = 0.8, mode = "optimize", reg = "poly", forecasting = True):
     asset = Asset(
-            symbol=s,
-            fiat = f,
+            symbol=symbol,
+            fiat = "USDT",
             frequency= f"{L}min",
             end = datetime.now(),
-            start = datetime.now() - timedelta(seconds= 60*L*300 ),
+            start = datetime.now() - timedelta(seconds= 60*L*100 ),
             source = "ext_api",
             broker="binance"
         )
@@ -64,216 +137,49 @@ def analyze_single(s, f):
     if asset.df is None or len(asset.df) == 0: 
         return None
 
-    return asset
+    try:
+        model = tf.keras.models.load_model(f"results/ann/{symbol}")
+    except Exception as e:
+        print( f"Exception with {symbol}. Exception: \n{e}" )
+        return None
 
-def slopes_strategy(asset):
-    asset.df["rsi_slope"] = asset.rsi_smoth_slope(27, 20, 4) > (5.75/1000)
-    asset.df["rsi_slope2"] = asset.rsi_smoth_slope(28, 8, 3) > (-4/1000)
-    asset.df["sma"] = asset.sma_slope( 33, 20 ) > ( 0 )
-    asset.df["dema"] = asset.dema(12).pct_change(11) > (5/1000)
-    asset.df["hull_twma"] = asset.hull_twma(7).pct_change(5) > (-4/1000)
-    asset.df["roc"] = asset.roc( 15 ).pct_change(12) > (7/1000)
-    asset.df[ "rsi_thr" ] = ( asset.rsi(10) >= 70 ).rolling(20).sum() == 0
-    asset.df["slopes"] = asset.df[["rsi_slope", "rsi_slope2", "sma", "dema", "hull_twma", "rsi_thr"]].all(axis = 1)
+    asset = features( asset, clf=False, drop = True , target = False)
 
-    return asset.df["slopes"]
+    validation = asset.df.iloc[-1:]# .drop(columns = ["target"])
 
-def sandr(asset):
-    # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
-    # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
-    # _, asset.df["resistance"] = asset.support_resistance(l)
-    # asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    # asset.df["rsi"] = asset.rsi_smoth_slope(30, 4, 7) > 0.00223 
-    # asset.df["sma"] = asset.sma_slope(44, 12) > (-0.00625)
+    if validation.isna().any().any():
+        print(f"{symbol} has NA in validation set")
+        return None
 
-    # After 19/03/2023 meta aplication
-    # se detiene esta estrategia por varias entradas erroneas. 21/3/2023
-    asset.df["ema_std"] = asset.ema(43).rolling(19).std()
-    # max_std = asset.df["ema_std"].max()
-    # max_std = asset.df["ema_std"].max()
-    l = 15 if asset.df["ema_std"].iloc[-1] <= 0.35 else 19
-    _, asset.df["resistance"] = asset.support_resistance(l)
-    asset.df["resistance"] = (asset.df["resistance"] == asset.df["close"]) | (asset.df["resistance"] == asset.df["low"])
-    
-    # Last change: 223/03/23
-    # Error con CTK
-    asset.df["rsi_smoth"] = asset.rsi_smoth( 21, 10 ).rolling( 10 ).std() > 1.2 # < 0.7
-    
-    asset.df[ "rsi_thr" ] = ( asset.rsi(7) >= 71 ).rolling(17).sum() == 0
+    validation = validation.to_numpy().astype('float32')
 
-    # Last Change: 23/03/23
-    # COTI Liquidation
-    asset.df["rsi_slope"] = asset.rsi(10)
-    asset.df["rsi_slope"] = asset.ema_slope(10, 3, target = "rsi_slope") > 0
-    
-    asset.df["sma"] = asset.ema_slope(30, 4) > (0) # -0.00625
+    pred = model.predict( validation )
 
-    return asset.df[ [ "resistance", "rsi_smoth", "rsi_thr", "rsi_slope", "sma" ] ].all(axis = 1)
-
-
-def analysis(asset):
-    """  
-        Last update: 7/3/2023
-
-        Based on results of 100gen pymoo_test
-    """
-    
-    # commented on 30/3/23
-    # because it never enters
-    asset.df["trend"] = asset.ema(50)
-    asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
-    asset.df["season"] = asset.sma( 25, target = "trend_res" )
-    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
-
-    seasonal = asset.df[["season"]].dropna()
-
-    # sampling rate
-    sr = len(seasonal)
-    # sampling interval
-    ts = 1/sr
-    t = np.arange(0,1,ts)
-
-    # r = round(seasonal["season"].std(), ndigits=2)
-    r = seasonal["season"].std()
-    
-    reg = []
-    for i in range(8, 30, 1):
-        y = np.sin(np.pi*i*t) * r
-
-        if len(y) != len(seasonal):
-            continue
-
-        seasonal["sin"] = y
-
-        error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
-
-        reg.append([ i, error ])
-
-    if len(reg) == 0:
-        print(f"  symbol {asset.symbol} no reg")
-        return False
-
-    reg = pd.DataFrame(reg, columns = ["freq", "error"])
-    i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
-    y = np.sin(np.pi*i*t)*r
-
-    zeros = np.zeros(len(asset.df) - len(y))
-    asset.df[ "sin" ] = zeros.tolist() + y.tolist()
-    asset.df[ "sin" ] = ( asset.df[ "sin" ] - asset.df[ "sin" ].min() ) / ( asset.df[ "sin" ].max() - asset.df[ "sin" ].min() )
-    asset.df["buy"] = asset.df["sin"] < 0.1
-
-    # Support and resistance
-    # asset.df["sandr"] = sandr( asset )
-
-    # Add slopes strategy 21/03/23
-    # Error con RNDR
-    # asset.df["slopes"] = slopes_strategy(asset)
-
-    d = asset.df.iloc[-1].to_dict()
-
-    seasonality = d["buy"]
-    if seasonality:
-        logging.info( f"Asset {asset.symbol} fills seasonality rule." )
-        logging.info( str(d) )
-    
-    # slopes = d["slopes"]
-    # if slopes:
-    #     logging.info( f"Asset {asset.symbol} fills slope rule." )
-    #     logging.info( str(d) )
-    
-    # sandr_ = d["sandr"]
-    # if sandr_:
-    #     logging.info( f"Asset {asset.symbol} fills support and resistance rule." )
-    #     logging.info( str(d) )
-
-    return ( seasonality )
-
-def analysis_2(asset):
-    """ 
-    04/09/2023 Created on dummy/test_simple_strategies 
-    """
-
-    asset.df["f1"] = asset.rsi_smoth( 15, 10 )
-    asset.df["f2"] = asset.df["f1"].rolling(10).std().between(1.35, 3.9, inclusive = "neither")
-    asset.df["f3"] = asset.ema(15).rolling(10).std() > 0.00095
-    asset.df["f4"] = asset.df["f1"].pct_change() > 0
-    asset.df["f5"] = asset.cci( 20 ) < 140
-
-    d = asset.df.iloc[-1].to_dict()
-
-    return (d["f4"] and d["f3"] and d["f2"] and d["f5"] )
-
-from scipy.ndimage import gaussian_filter1d
-
-def analysis_3(asset):
-    """  
-    10/09/2023 Created on dimmy/test_simple_strategies
-    Inflection point
-
-    Update 11/9/2023: Add rsi
-                    Add rsi_smoth_std
-    """
-    
-    # noisy data
-    raw = asset.df["close"].values
-
-    # Normalize
-    raw = ( raw - min(raw) ) / ( max(raw) - min(raw) )
-
-    # smooth
-    smooth = gaussian_filter1d(raw, 5) # 20 because there are 20 time slots in an hour
-
-    # compute second derivative
-    smooth_d2 = np.gradient(np.gradient(smooth))
-
-    # find switching points
-    infls = np.where(np.diff(np.sign(smooth_d2)))[0]
-
-    asset.df.loc[ asset.df.iloc[ infls ].index,  "inflection"] = True
-    asset.df["smoth"] = smooth
-    asset.df["smoth"] = asset.df["smoth"].diff(1) > 0
-    asset.df["rsi"] = (asset.rsi( 10 ) < 70).rolling( 6 ).sum() == 6
-
-    asset.df["rsi_smoth_std"] = asset.rsi_smoth( 10, 5 ).rolling( 5 ).std() < 3
-
-    d = asset.df.iloc[-1].to_dict()
-
-    return (d["smoth"] and d["inflection"] and d["rsi"] and d["rsi_smoth_std"])
+    return pred[0]
 
 # @timing
 def analyze():
     print("Analyze")
-
-    first_rule = []
-    second_rule = []
-
-    assets = []
-
-    def myFunc(e):
-        return e['return']
+    
+    print(f"Trading pairs: {len(trading_pairs)}")
 
     with mp.Pool( mp.cpu_count() ) as pool:
         assets = pool.starmap(
             analyze_single,
-            [ (s,f) for s,f in trading_pairs ]   
+            trading_pairs
         )
     
-    assets = [ { "asset":asset } for asset in assets if asset is not None ]
+    assets = [ [symbol[0], r] for symbol ,r in zip( trading_pairs, assets) if r is not None ]
 
-    first_rule = [ {"symbol": s["asset"].symbol, "return": s["asset"].momentum(3).iloc[-1]} for s in assets if analysis_3(s["asset"]) ]
+    df = pd.DataFrame(assets, columns = ["symbol", "prediction"])
+    df.sort_values(by = "prediction", ascending=False, inplace = True)
 
-    second_rule = copy(first_rule)
-        
-    first_rule.sort(key = myFunc, reverse=False)
-    second_rule.sort(key = myFunc, reverse=True)
+    df = df[ ( df["prediction"] > 0 )] # (~df["pred"]) &
 
-    return first_rule, second_rule
-
-def calculate_stop_price(bougth_price, leverage, pct_limit):
-
-    pct_min = pct_limit*( 1 / leverage)/100
-
-    return bougth_price*(1 - pct_min)
+    if len(df) == 0:
+        return []
+    
+    return df["symbol"].values[:5]
 
 # @timing
 def set_orders(symbol):
@@ -411,7 +317,6 @@ def set_orders(symbol):
 
         return orderSell
 
-    # stop_price = calculate_stop_price(real_price_bought, leverage,  STOP_LIMIT_PCT )
     orderSell = set_sell_order(symbol, price_sell, qty, price_rounding)
     if orderSell is None:
         print(f"Error with sell order for {symbol} due rounding")
@@ -443,12 +348,20 @@ def check_market():
     return asset
 
 def wait(orderSell):
-    bi = Binance(symbol="")
-    try:
-        df_trades = pd.DataFrame(bi.client.futures_account_trades())
-    except Exception as e:
-        print(e, e.__dict__)
-        raise Exception(e)
+    
+    for i in range(4):
+        bi = Binance(symbol="")
+
+        try:
+            df_trades = pd.DataFrame(bi.client.futures_account_trades(  ))
+            break
+        except (socket.gaierror, NewConnectionError, MaxRetryError, ConnectionError) as e:
+            # print(e, e.__dict__)
+            # raise Exception(e)
+            print( f"Exception error, iteration {i}")
+
+        if i == 3:
+            raise Exception(e)
 
     df_trades = df_trades[ df_trades["orderId"] == orderSell["orderId"] ]
 
@@ -458,28 +371,13 @@ def wait(orderSell):
     return False
 
 def main():
-    f, s = analyze()
+    symbols = analyze()
     
-    if len(f) == 0:
-        # if len(s) == 0:
-        #     print("No order is going to be sent")
-
-        #     return 0
-        # orders = s
+    if len(symbols) == 0:
         print("No order is going to be sent")
         return 0
-    else:
-        orders = f # + s
-    
-        # print("Orders")
-        # print(f)
-        # print(s)
-        # print("\n")
-        # return 0
-    
-    # logging.info( f"Strategy selected assets: { ','.join( [ i['symbol'] for i in orders ] ) }" )
 
-    symbol = orders[0]["symbol"]
+    symbol = symbols[0]
 
     bad_symbols = ["SC", "RAY"]
     def checker(symbol, counter):
@@ -487,7 +385,7 @@ def main():
         counter += 1
 
         if symbol in bad_symbols:
-            if len(orders) == 1:
+            if len(symbols) == 1:
                 print("No good symbol to run.")
                 return None
 
@@ -495,11 +393,12 @@ def main():
                 print("Counter reach 3")    
                 return None
             
-            return checker( orders[1]["symbol"] , counter= counter)
+            return checker( symbols[counter] , counter= counter)
         
         return symbol
     
     symbol = checker(symbol, counter = 0)
+
     if symbol is None:
         return 1
 
@@ -547,21 +446,7 @@ def bot():
         if i == 3:
             raise Exception(e)
         
-    
     print("Order fill!\n\n")
-
-    # total_time = time.time() - st
-    # start_time = datetime.now() - relativedelta(seconds= total_time + ( 60*5 ) )
-
-    # historic_download( 
-    #     broker = "binance", 
-    #     fiat = "usdt", 
-    #     frequency= "1min",
-    #     start = start_time.date(),
-    #     from_ = "ext_api",
-    #     verbose = False
-    # )
-    # print("\n")
 
     bot()
 
@@ -585,7 +470,7 @@ if __name__ == "__main__":
     logging.info(f'PCT: {PCT}')
     logging.info(f'Share: {SHARE}')
     logging.info(f'Leverage: {LEVERAGE}')
-    logging.info(f'Assets: { ",".join([ i+j for i,j in trading_pairs ]) }')
+    # logging.info(f'Assets: { ",".join( trading_pairs ) }')
 
     bot()
     # get_orders()

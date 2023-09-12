@@ -38,6 +38,49 @@ asset = Asset(
     source = "ext_api"
 )
 
+def oscillation(asset):
+    asset.df["trend"] = asset.ema(50)
+    asset.df["trend_res"] = asset.df["close"] - asset.df["trend"]
+    asset.df["season"] = asset.sma( 25, target = "trend_res" )
+    asset.df["season_res"] = asset.df["trend_res"] - asset.df["season"]
+
+    seasonal = asset.df[["season"]].dropna()
+
+    # sampling rate
+    sr = len(seasonal)
+    # sampling interval
+    ts = 1/sr
+    t = np.arange(0,1,ts)
+
+    # r = round(seasonal["season"].std(), ndigits=2)
+    r = seasonal["season"].std()
+    
+    reg = []
+    for i in range(8, 30, 1):
+        y = np.sin(np.pi*i*t) * r
+
+        if len(y) != len(seasonal):
+            continue
+
+        seasonal["sin"] = y
+
+        error  = np.linalg.norm( seasonal["season"] - seasonal["sin"] )
+
+        reg.append([ i, error ])
+
+    if len(reg) == 0:
+        print(f"  symbol {asset.symbol} no reg")
+        return False
+
+    reg = pd.DataFrame(reg, columns = ["freq", "error"])
+    i = reg[ reg[ "error" ] == reg["error"].min() ]["freq"].iloc[0]
+    y = np.sin(np.pi*i*t)*r
+
+    zeros = np.zeros(len(asset.df) - len(y))
+    asset.df[ "sin" ] = zeros.tolist() + y.tolist()
+    asset.df[ "sin" ] = ( asset.df[ "sin" ] - asset.df[ "sin" ].min() ) / ( asset.df[ "sin" ].max() - asset.df[ "sin" ].min() )
+    return asset.df["sin"] < 0.1
+
 def sandr(asset):
     # El problema de esta es que casi nunca entraba, pero cuando entraba si las cerraba
     # l = 9 if asset.ema(27).rolling(20).std().iloc[-1] <= 0.7421 else 18
@@ -71,7 +114,7 @@ def sandr(asset):
     return asset.df[ [ "resistance", "rsi_smoth", "rsi_thr", "rsi_slope", "sma" ] ].all(axis = 1)
 
 
-asset.df["buy"] = sandr(asset)
+asset.df["buy"] = oscillation(asset)
 
 # asset.df["rsi_slope"] = asset.rsi_smoth_slope(27, 20, 4) > (5.75/1000)
 # asset.df["rsi_slope2"] = asset.rsi_smoth_slope(28, 8, 3) > (-4/1000)
