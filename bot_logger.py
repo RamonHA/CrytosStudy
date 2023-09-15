@@ -212,6 +212,8 @@ def analysis_3(asset):
 
     Update 11/9/2023: Add rsi
                     Add rsi_smoth_std
+
+            15/9/23: Change params based on first results of test_simple_strategies.ipynb
     """
     
     # noisy data
@@ -221,7 +223,7 @@ def analysis_3(asset):
     raw = ( raw - min(raw) ) / ( max(raw) - min(raw) )
 
     # smooth
-    smooth = gaussian_filter1d(raw, 5) # 20 because there are 20 time slots in an hour
+    smooth = gaussian_filter1d(raw, 2) # 20 because there are 20 time slots in an hour
 
     # compute second derivative
     smooth_d2 = np.gradient(np.gradient(smooth))
@@ -232,9 +234,10 @@ def analysis_3(asset):
     asset.df.loc[ asset.df.iloc[ infls ].index,  "inflection"] = True
     asset.df["smoth"] = smooth
     asset.df["smoth"] = asset.df["smoth"].diff(1) > 0
-    asset.df["rsi"] = (asset.rsi( 10 ) < 70).rolling( 6 ).sum() == 6
 
-    asset.df["rsi_smoth_std"] = asset.rsi_smoth( 10, 5 ).rolling( 5 ).std() < 3
+    asset.df["rsi"] = (asset.rsi( 10 ) < 75).rolling( 7 ).sum() == 7
+
+    asset.df["rsi_smoth_std"] = asset.rsi_smoth( 15, 10 ).rolling( 5 ).std() < 3.5
 
     d = asset.df.iloc[-1].to_dict()
 
